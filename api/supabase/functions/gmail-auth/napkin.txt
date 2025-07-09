@@ -1,0 +1,16 @@
+This func handle the OAuth callback from gmail auth (which comes from frontend)
+
+1. user is sent to the gmail login page (which we have done before)
+
+2. after auth, that page sends us a temporary code
+
+3. that temp code is then sent to THIS (gmail auth) function which
+  gives us access tokens which are stored in the db (encrypted) 
+  to interact with the api
+
+
+we actually provide the redirect uri to the google endpoint,
+then google sends a get request to the supabase function with 
+the code, the supabase function then strips the code and stores it
+
+
