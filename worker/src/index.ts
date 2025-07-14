@@ -7,6 +7,7 @@ import {
   refreshAccessToken,
 } from "./lib/gmail";
 import parseEmail from "./lib/parseEmail";
+import { GmailTokenRow } from "./types";
 
 async function updateToken(
   userId: string,
@@ -21,7 +22,7 @@ async function updateToken(
     .eq("user_id", userId);
 }
 
-async function fetchAccessToken(tokenRow: any) {
+async function fetchAccessToken(tokenRow: GmailTokenRow) {
   let accessToken = tokenRow.access_token;
   if (tokenRow.expires_at * 1000 <= Date.now()) {
     const refreshed = await refreshAccessToken(tokenRow.refresh_token);
@@ -37,7 +38,7 @@ async function fetchAccessToken(tokenRow: any) {
   return accessToken;
 }
 
-async function syncUser(tokenRow: any) {
+export async function syncUser(tokenRow: GmailTokenRow) {
   const accessToken = await fetchAccessToken(tokenRow);
   if (!accessToken) {
     console.error("Access token invalid in syncUser func, exiting");
@@ -48,19 +49,17 @@ async function syncUser(tokenRow: any) {
 
   const threads = threadsRes.threads || [];
 
-
   for (const thread of threads) {
     const threadData = await getThread(accessToken, thread.id);
     for (const msg of threadData.messages) {
       const fullMsg = await getMessage(accessToken, msg.id);
       const email = parseEmail(tokenRow.user_id, fullMsg);
 
-
       const res = await supabase
         .from("emails")
         .upsert(email, { onConflict: "user_id,message_id" });
 
-        console.log(res.error);
+      console.log('synced email with id: ', email.message_id, " into user id: ", tokenRow.user_id);
 
       await supabase.from("email_threads").upsert(
         {
@@ -71,6 +70,11 @@ async function syncUser(tokenRow: any) {
         },
         { onConflict: "user_id,thread_id" }
       );
+
+      await supabase
+        .from("gmail_tokens")
+        .update({ last_synced_at: new Date().toISOString() })
+        .eq("user_id", tokenRow.user_id);
     }
   }
 }
@@ -90,6 +94,9 @@ export async function syncAllUsers() {
   }
 }
 
+
+
+
 // 20 minute cron to sync every users email into the db
 cron.schedule("*/30 * * * *", () => {
   console.log("Running sync at", new Date().toISOString());
@@ -97,4 +104,6 @@ cron.schedule("*/30 * * * *", () => {
 });
 
 // run immediately on load
-syncAllUsers().catch((err) => console.error(err));
+
+// TODO: uncomment this out when building for prod. having this run on every single deployment is making so many extraneous requests
+// syncAllUsers().catch((err) => console.error(err));
