@@ -6,10 +6,13 @@ dotenv.config();
 const GMAIL_API_URL = 'https://gmail.googleapis.com/gmail/v1'
 
 export async function refreshAccessToken(refreshToken: string) {
+  console.log('refreshing access token');
 
   const params = new URLSearchParams()
-  params.append('client_id', process.env.GMAIL_CLIENT_ID as string)
-  params.append('client_secret', process.env.GMAIL_CLIENT_SECRET as string)
+
+  // TODO: remove these hardcoded things
+  params.append('client_id', process.env.GOOGLE_CLIENT_ID as string)
+  params.append('client_secret', process.env.GOOGLE_CLIENT_SECRET as string)
   params.append('refresh_token', refreshToken)
   params.append('grant_type', 'refresh_token')
 
@@ -19,17 +22,20 @@ export async function refreshAccessToken(refreshToken: string) {
     body: params.toString()
   })
 
-  if (res.ok) {
-    console.info("Fetched refresh token!")
-  }
+  const resultText = await res.text()
+
+  console.log("new refresh token fetched");
+  console.log(JSON.parse(resultText));
 
   if (!res.ok) {
-    console.error('Failed to refresh token', await res.text())
+    console.error('❌ Failed to refresh token:', resultText)
     return null
   }
 
-  return res.json() as Promise<{ access_token: string; expires_in: number }>
+  console.info('✅ Refreshed token successfully!')
+  return JSON.parse(resultText) as { access_token: string; expires_in: number }
 }
+
 
 async function gmailRequest<T>(accessToken: string, path: string): Promise<T> {
   const res = await fetch(`${GMAIL_API_URL}${path}`, {

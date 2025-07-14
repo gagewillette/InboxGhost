@@ -90,10 +90,11 @@ export async function syncAllUsers() {
   }
 }
 
-cron.schedule("*/5 * * * *", () => {
+// 20 minute cron to sync every users email into the db
+cron.schedule("*/30 * * * *", () => {
   console.log("Running sync at", new Date().toISOString());
   syncAllUsers().catch((err) => console.error(err));
 });
 
-// run immediately
+// run immediately on load
 syncAllUsers().catch((err) => console.error(err));

@@ -1,11 +1,18 @@
 'use client'
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 import { supabase } from '../../supabase'
-import { useSession } from '@supabase/auth-helpers-react'
-import type { Email, EmailThread } from '../../../types'
+import type { Email, EmailThread } from '../../types'
+import { fetchEmails, fetchEmailThreads } from '../lib/emails'
 
-interface EmailContextType {
+export interface EmailContextType {
   emails: Email[]
   threads: EmailThread[]
   loading: boolean
@@ -15,51 +22,86 @@ interface EmailContextType {
 
 const EmailContext = createContext<EmailContextType | undefined>(undefined)
 
-export const EmailProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const session = useSession()
+export const EmailProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
+  const [session, setSession] = useState<Session | null>(null)
   const [emails, setEmails] = useState<Email[]>([])
   const [threads, setThreads] = useState<EmailThread[]>([])
-  const [loading, setLoading] = useState<boolean>(false)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // ✅ Setup session on load
+  useEffect(() => {
+    const loadSession = async () => {
+      // fetch session
+      const { data } = await supabase.auth.getSession()
+      setSession(data.session ?? null)
+
+      // subscribe to auth changes
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange((_event, session) => {
+        setSession(session)
+      })
+
+      // unsub from auth changes on unmount
+      return () => {
+        subscription.unsubscribe()
+      }
+    }
+
+    loadSession().then(() => {
+
+      // check valid user
+      if (session?.user) {
+        console.log('user is valid, fetching data');
+        fetchData();
+      }
+    });
+  }, [])
 
   const fetchData = useCallback(async () => {
     if (!session?.user) return
+
+    console.log("fetching data from user ", session.user);
+
     setLoading(true)
     setError(null)
     try {
-      const { data: emailData, error: emailError } = await supabase
-        .from('emails')
-        .select('*')
-        .eq('user_id', session.user.id)
+      const emailData = await fetchEmails(session.user.id);
+      const threadData = await fetchEmailThreads(session.user.id);
 
-      const { data: threadData, error: threadError } = await supabase
-        .from('email_threads')
-        .select('*')
-        .eq('user_id', session.user.id)
+      // sort the emails by time, newest first
+      emailData.sort((a: Email, b: Email) => {
+        return new Date(b.internal_date).getTime() - new Date(a.internal_date).getTime();
+      })
 
-      if (emailError || threadError) {
-        setError(emailError?.message || threadError?.message || 'Failed to fetch emails')
-      } else {
-        setEmails(emailData ?? [])
-        setThreads(threadData ?? [])
-      }
+      setEmails(emailData ?? [])
+      setThreads(threadData ?? [])
+    } catch (err: any) {
+      setError(err.message ?? 'Failed to fetch data')
     } finally {
       setLoading(false)
     }
-  }, [session?.user])
-
-  useEffect(() => {
-    if (session?.user) {
-      fetchData()
-    }
-  }, [session?.user, fetchData])
+  }, [session?.user?.id])
 
   const contextValue = useMemo(
-    () => ({ emails, threads, loading, error, refresh: fetchData }),
+    () => ({
+      emails,
+      threads,
+      loading,
+      error,
+      refresh: fetchData,
+    }),
     [emails, threads, loading, error, fetchData]
   )
 
-  return <EmailContext.Provider value={contextValue}>{children}</EmailContext.Provider>
+  return (
+    <EmailContext.Provider value={contextValue}>
+      {children}
+    </EmailContext.Provider>
+  )
 }
 
 export const useEmails = (): EmailContextType => {
