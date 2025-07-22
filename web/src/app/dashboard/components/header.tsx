@@ -6,7 +6,7 @@ import LogoShit from "../assets/logo.png";
 export default function DashbaordHeader() {
   return (
     <>
-      <header className="text-white min-h-12 border-b-cyan-50 border-b-1">
+      <header className="text-white min-h-12 border-b border-white/20 border-[0.5px]">
         <div className="flex flex-row justify-around items-center min-h-full">
           <div className="flex flex-row items-center gap-4">
             <Logo />

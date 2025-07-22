@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useEmails } from "../contexts/email_context";
 import type { EmailContextType } from "../contexts/email_context";
-import type { Email, EmailThread } from "@/app/types";
+import type { EmailThread } from "@/app/types";
 
 export default function EmailViewer() {
   const emailContextData: EmailContextType = useEmails();
@@ -18,10 +18,26 @@ export default function EmailViewer() {
 
   return (
     <>
+      <SubHeader handle={refreshHandler} />{" "}
+      {/* Local refactor of refresh and 'importance' buttons */}
+      {emailContextData.loading ? (
+        <div>Loading...</div>
+      ) : (
+        emailContextData.threads.map((thread: EmailThread) => (
+          <ThreadListElement key={thread.thread_id} {...thread} />
+        ))
+      )}
+    </>
+  );
+}
+
+function SubHeader({ handle }: { handle: () => void }) {
+  return (
+    <>
       <div className="flex flex-row gap-4 min-w-full justify-center">
         <button
           type="button"
-          onClick={refreshHandler}
+          onClick={handle}
           className="text-white bg-purple-700 hover:bg-purple-800 focus:outline-none focus:ring-4 focus:ring-purple-300 font-medium rounded-full text-sm px-5 py-2.5 text-center mb-2 dark:bg-purple-600 dark:hover:bg-purple-700 dark:focus:ring-purple-900"
         >
           Refresh
@@ -46,14 +62,6 @@ export default function EmailViewer() {
           High Importance
         </button>
       </div>
-
-      {emailContextData.loading ? (
-        <div>Loading...</div>
-      ) : (
-        emailContextData.threads.map((thread: EmailThread) => (
-          <ThreadListElement key={thread.thread_id} {...thread} />
-        ))
-      )}
     </>
   );
 }
@@ -61,7 +69,7 @@ export default function EmailViewer() {
 function ThreadListElement(thread: EmailThread) {
   return (
     <>
-      <div className="w-full bg-gray-900 text-white flex flex-col border-1">
+      <div className="w-full bg-gray-900 hover:bg-gray-400 hover:cursor-pointer text-white flex flex-col border border-white/20 border-[0.5px] p-1">
         <span className="font-bold">{thread.subject}</span>
         <div className="flex flex-row gap-4">
           <span className="font-light text-xs">{thread.thread_id}</span>
