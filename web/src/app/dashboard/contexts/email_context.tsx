@@ -55,15 +55,7 @@ export const EmailProvider: React.FC<{ children: React.ReactNode }> = ({
     loadSession()
   }, [])
 
-  // Fetch data whenever we have a valid session
-  useEffect(() => {
-    if (session?.user) {
-      console.log('user is valid, fetching data')
-      fetchData()
-    }
-  }, [session, fetchData])
-
-  const fetchData = useCallback(async () => {
+    const fetchData = useCallback(async () => {
     if (!session?.user) return
 
     console.log("fetching data from user ", session.user);
@@ -91,6 +83,14 @@ export const EmailProvider: React.FC<{ children: React.ReactNode }> = ({
       setLoading(false)
     }
   }, [session])
+
+  // Fetch data whenever we have a valid session
+  useEffect(() => {
+    if (session?.user) {
+      console.log('user is valid, fetching data')
+      fetchData()
+    }
+  }, [session, fetchData])
 
   const contextValue = useMemo(
     () => ({
