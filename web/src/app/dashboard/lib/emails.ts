@@ -1,7 +1,6 @@
 // lib/emails.ts
 import { supabase } from "@/app/supabase";
 import type { Email, EmailThread } from "@/app/types";
-import { Snippet } from "next/font/google";
 
 export async function fetchEmails(userId: string): Promise<Email[]> {
   const { data, error } = await supabase
