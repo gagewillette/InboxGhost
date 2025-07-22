@@ -4,21 +4,17 @@ import { useEffect } from "react";
 import { useEmails } from "../contexts/email_context";
 import type { EmailContextType } from "../contexts/email_context";
 import type { EmailThread } from "@/app/types";
+import { supabase } from "@/app/supabase";
+import { triggerEmailSync } from "../lib/emails";
 
 export default function EmailViewer() {
   const emailContextData: EmailContextType = useEmails();
 
-  useEffect(() => {
-    emailContextData.refresh();
-  }, []);
-
-  const refreshHandler = () => {
-    emailContextData.refresh();
-  };
+  useEffect(() => {}, []);
 
   return (
     <>
-      <SubHeader handle={refreshHandler} />{" "}
+      <SubHeader data={emailContextData} />
       {/* Local refactor of refresh and 'importance' buttons */}
       {emailContextData.loading ? (
         <div>Loading...</div>
@@ -31,16 +27,82 @@ export default function EmailViewer() {
   );
 }
 
-function SubHeader({ handle }: { handle: () => void }) {
+function SubHeader({ data }: { data: EmailContextType }) {
+  const refreshHandler = () => {
+    data.refresh();
+  };
+
+  const pollHandler = async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    const user_id = session?.user?.id;
+
+    if (!user_id) {
+      console.error("no id");
+      return;
+    }
+
+    triggerEmailSync(user_id);
+  };
+
+  const deleteHandler = async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    const accessToken = session?.access_token;
+
+    if (!accessToken) {
+      console.error("No access token found.");
+      return;
+    }
+
+    const res = await fetch(
+      "https://zvhhoepsfpotpuaenrpp.supabase.co/functions/v1/delete-emails",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ name: "Functions" }),
+      }
+    );
+
+    if (!res.ok) {
+      console.error("Failed to delete emails:", await res.text());
+    } else {
+      console.info("Emails deleted successfully.");
+    }
+  };
+
   return (
     <>
       <div className="flex flex-row gap-4 min-w-full justify-center">
         <button
           type="button"
-          onClick={handle}
+          onClick={refreshHandler}
           className="text-white bg-purple-700 hover:bg-purple-800 focus:outline-none focus:ring-4 focus:ring-purple-300 font-medium rounded-full text-sm px-5 py-2.5 text-center mb-2 dark:bg-purple-600 dark:hover:bg-purple-700 dark:focus:ring-purple-900"
         >
           Refresh
+        </button>
+
+        <button
+          type="button"
+          onClick={refreshHandler}
+          className="text-white bg-blue-700 hover:bg-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-300 font-medium rounded-full text-sm px-5 py-2.5 text-center mb-2 dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-900"
+        >
+          Poll New Emails
+        </button>
+
+        <button
+          type="button"
+          onClick={deleteHandler}
+          className="text-white bg-orange-700 hover:bg-orngae-800 focus:outline-none focus:ring-4 focus:ring-orange-300 font-medium rounded-full text-sm px-5 py-2.5 text-center mb-2 dark:bg-orange-600 dark:hover:bg-orange-700 dark:focus:ring-orange-900"
+        >
+          Fucking Nuke the DB
         </button>
 
         <button

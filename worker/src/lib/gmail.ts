@@ -62,7 +62,7 @@ async function gmailRequest<T>(accessToken: string, path: string, debug?: string
 export function listRecentThreads(accessToken: string) {
   return gmailRequest<{ threads?: { id: string }[] }>(
     accessToken,
-    '/users/me/threads?maxResults=100&q=in:inbox -category:social -category:promotions newer_than:9d',
+    '/users/me/threads?maxResults=100&q=in:inbox -category:social -category:promotions newer_than:1d',
     'recentThreads'
   )
 }

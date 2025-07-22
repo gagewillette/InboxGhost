@@ -11,6 +11,7 @@ import {
 import { supabase } from '../../supabase'
 import type { Email, EmailThread } from '../../types'
 import { fetchEmails, fetchEmailThreads } from '../lib/emails'
+import { Session } from '@supabase/supabase-js'
 
 export interface EmailContextType {
   emails: Email[]
