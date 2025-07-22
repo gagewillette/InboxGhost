@@ -52,15 +52,16 @@ export const EmailProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     }
 
-    loadSession().then(() => {
-
-      // check valid user
-      if (session?.user) {
-        console.log('user is valid, fetching data');
-        fetchData();
-      }
-    });
+    loadSession()
   }, [])
+
+  // Fetch data whenever we have a valid session
+  useEffect(() => {
+    if (session?.user) {
+      console.log('user is valid, fetching data')
+      fetchData()
+    }
+  }, [session, fetchData])
 
   const fetchData = useCallback(async () => {
     if (!session?.user) return
@@ -80,12 +81,16 @@ export const EmailProvider: React.FC<{ children: React.ReactNode }> = ({
 
       setEmails(emailData ?? [])
       setThreads(threadData ?? [])
-    } catch (err: any) {
-      setError(err.message ?? 'Failed to fetch data')
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message)
+      } else {
+        setError('Failed to fetch data')
+      }
     } finally {
       setLoading(false)
     }
-  }, [session?.user?.id])
+  }, [session])
 
   const contextValue = useMemo(
     () => ({
