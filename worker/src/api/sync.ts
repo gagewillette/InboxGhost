@@ -1,22 +1,22 @@
 import { Request, Response } from 'express'
-import { syncUser } from '../lib/sync'
+import { syncUser } from '..'
 import supabase from '../lib/supabase'
 
-export default async function handler(req: Request, res: Response) {
+export default async function syncHandler(req: Request, res: Response) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const { userId } = req.body
+  const { user_id } = req.body
 
-  if (!userId) {
-    return res.status(400).json({ error: 'Missing userId in request body' })
+  if (!user_id) {
+    return res.status(400).json({ error: 'Missing user_id in request body' })
   }
 
   const { data: tokenRow, error } = await supabase
     .from('gmail_tokens')
     .select('*')
-    .eq('user_id', userId)
+    .eq('user_id', user_id)
     .single()
 
   if (error || !tokenRow) {
@@ -24,10 +24,15 @@ export default async function handler(req: Request, res: Response) {
   }
 
   try {
+    console.log("attempting to sync for user: ", user_id);
+
     await syncUser(tokenRow)
+
     return res.status(200).json({ message: 'Inbox sync complete' })
   } catch (err: any) {
     console.error(err)
     return res.status(500).json({ error: 'Failed to sync inbox' })
   }
 }
+
+

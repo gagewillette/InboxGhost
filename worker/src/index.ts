@@ -8,6 +8,9 @@ import {
 } from "./lib/gmail";
 import parseEmail from "./lib/parseEmail";
 import { GmailTokenRow } from "./types";
+import express from "express";
+import syncHandler from "./api/sync";
+import healthCheck from "./api/health";
 
 async function updateToken(
   userId: string,
@@ -39,14 +42,17 @@ async function fetchAccessToken(tokenRow: GmailTokenRow) {
 }
 
 export async function syncUser(tokenRow: GmailTokenRow) {
+  // fetch new access token if needed
   const accessToken = await fetchAccessToken(tokenRow);
   if (!accessToken) {
     console.error("Access token invalid in syncUser func, exiting");
     return;
   }
 
+  // get list of recent threads from gmail api
   const threadsRes = await listRecentThreads(accessToken);
 
+  // cast threads response
   const threads = threadsRes.threads || [];
 
   for (const thread of threads) {
@@ -59,7 +65,12 @@ export async function syncUser(tokenRow: GmailTokenRow) {
         .from("emails")
         .upsert(email, { onConflict: "user_id,message_id" });
 
-      console.log('synced email with id: ', email.message_id, " into user id: ", tokenRow.user_id);
+      console.log(
+        "synced email with id: ",
+        email.message_id,
+        " into user id: ",
+        tokenRow.user_id
+      );
 
       await supabase.from("email_threads").upsert(
         {
@@ -81,11 +92,12 @@ export async function syncUser(tokenRow: GmailTokenRow) {
 
 export async function syncAllUsers() {
   const { data, error } = await supabase.from("gmail_tokens").select("*");
+
   if (error) {
     console.error("Failed to fetch users", error);
     return;
   }
-  for (const row of data) {
+  for (const row of data as GmailTokenRow[]) {
     try {
       await syncUser(row);
     } catch (err) {
@@ -94,8 +106,16 @@ export async function syncAllUsers() {
   }
 }
 
+const app = express();
+app.use(express.json());
 
+app.post("/api/sync", syncHandler);
+app.get("/health", healthCheck);
 
+const PORT = 3000;
+app.listen(PORT, () => {
+  console.log(`Worker API is up and running on port ${PORT}`);
+});
 
 // 20 minute cron to sync every users email into the db
 cron.schedule("*/30 * * * *", () => {
@@ -104,6 +124,7 @@ cron.schedule("*/30 * * * *", () => {
 });
 
 // run immediately on load
-
-// TODO: uncomment this out when building for prod. having this run on every single deployment is making so many extraneous requests
-// syncAllUsers().catch((err) => console.error(err));
+setTimeout(() => {
+  console.log("booted up and running inital sync");
+  syncAllUsers().catch((err) => console.error(err));
+}, 2500);

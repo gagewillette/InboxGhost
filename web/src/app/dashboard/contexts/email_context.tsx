@@ -73,8 +73,8 @@ export const EmailProvider: React.FC<{ children: React.ReactNode }> = ({
       const threadData = await fetchEmailThreads(session.user.id);
 
       // sort the emails by time, newest first
-      emailData.sort((a: Email, b: Email) => {
-        return new Date(b.internal_date).getTime() - new Date(a.internal_date).getTime();
+      threadData.sort((a: EmailThread, b: EmailThread) => {
+        return new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime();
       })
 
       setEmails(emailData ?? [])

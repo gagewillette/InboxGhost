@@ -15,7 +15,7 @@ export default function DashbaordHeader() {
 
           <div className="flex flex-row items-center text-white text-2xl font-medium gap-4">
             <span>Sign Out</span>
-            <spam>Sign In</spam>
+            <span>Sign In</span>
 
           </div>
         </div>

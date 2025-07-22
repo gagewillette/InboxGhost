@@ -37,33 +37,48 @@ export async function refreshAccessToken(refreshToken: string) {
 }
 
 
-async function gmailRequest<T>(accessToken: string, path: string): Promise<T> {
+async function gmailRequest<T>(accessToken: string, path: string, debug?: string ): Promise<T> {
   const res = await fetch(`${GMAIL_API_URL}${path}`, {
     headers: { Authorization: `Bearer ${accessToken}` }
   })
   if (!res.ok) {
     throw new Error(`Gmail request failed: ${res.status} ${res.statusText}`)
   }
+
+  if (debug) console.log(`[GMAIL DEBUG 🐞] ${debug}`);
+
   return res.json() as Promise<T>
 }
 
+
+// this function (as of now) is only fetching from the primary inbox by using query params
+// here are a list of labelIds for future reference if needed to be changed
+
+// CATEGORY_PERSONAL => Primary Inbox
+// CATEGORY_SOCIAL => Social Inbox 
+// CATEGORY_PROMOTIONS => Promos
+// CATEGORY_UPDATES => Updates (idk what this is)
+// CATEGORY_FORUMS => Foums (idk what this is either lmao)
 export function listRecentThreads(accessToken: string) {
   return gmailRequest<{ threads?: { id: string }[] }>(
     accessToken,
-    '/users/me/threads?maxResults=10&q=newer_than:1d'
+    '/users/me/threads?maxResults=100&q=in:inbox -category:social -category:promotions newer_than:9d',
+    'recentThreads'
   )
 }
 
 export function getThread(accessToken: string, threadId: string) {
   return gmailRequest<{ messages: { id: string }[] }>(
     accessToken,
-    `/users/me/threads/${threadId}?format=metadata`
+    `/users/me/threads/${threadId}?format=metadata`,
+    'getThreads'
   )
 }
 
 export function getMessage(accessToken: string, messageId: string) {
   return gmailRequest<any>(
     accessToken,
-    `/users/me/messages/${messageId}?format=full`
+    `/users/me/messages/${messageId}?format=full`,
+    'getMessage'
   )
 }
