@@ -17,4 +17,7 @@ export interface EmailThread {
   thread_id: string;
   subject: string;
   last_message_at: string; // ISO string
+  importance?: "high" | "med" | "low"; // AI-scored, pending implementation
 }
+
+export type ImportanceFilter = "all" | "high" | "med" | "low";

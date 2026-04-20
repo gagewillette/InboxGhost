@@ -5,3 +5,8 @@ web/yarn.lock
 
 
 worker/node_modules
+.DS_Store
+/api/.vscode
+web/.DS_Store
+web/.env.local
+web/.DS_Store

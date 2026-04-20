@@ -39,20 +39,37 @@ function decodeHtmlEntities(str: string) {
 
 
 
-// for the fucking love of god remove this
-export async function triggerEmailSync(user_id: string) {
-  const res = await fetch('/api/fetch-new-emails', {
+export async function triggerEmailSync(accessToken: string) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const res = await fetch(`${supabaseUrl}/functions/v1/fetch-new-emails`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp2aGhvZXBzZnBvdHB1YWVucnBwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwNzg2MjIsImV4cCI6MjA2NzY1NDYyMn0.ZcPybskFVIqag_KzDnQSyS9B-kl6ZbcQonOwPG24LiE`, // if public
+      Authorization: `Bearer ${accessToken}`,
     },
-    body: JSON.stringify({ user_id }),
   });
 
   if (!res.ok) {
     const error = await res.text();
     throw new Error(`Failed to trigger sync: ${error}`);
+  }
+
+  return res.json();
+}
+
+export async function deleteAllEmails(accessToken: string) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const res = await fetch(`${supabaseUrl}/functions/v1/delete-emails`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(`Failed to delete emails: ${error}`);
   }
 
   return res.json();
