@@ -1,32 +1,171 @@
-// Follow this setup guide to integrate the Deno language server with your editor:
-// https://deno.land/manual/getting_started/setup_your_environment
-// This enables autocomplete, go to definition, etc.
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "jsr:@supabase/supabase-js@2";
 
-// Setup type definitions for built-in Supabase Runtime APIs
-import "@supabase/functions-js/edge-runtime.d.ts"
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
 
-console.log("Hello from Functions!")
+
+const systemPrompt = `You are an email classifier. You will receive a list of available labels and an email (from, subject, and optional body).
+
+Assign zero or more labels from the available list that genuinely describe the email. Do not invent labels not in the list. If no labels match, return an empty array.
+
+Set importance based on how urgently the user needs to see or act on this email:
+- "high": requires action soon, time-sensitive, or from someone important
+- "med": worth reading but not urgent
+- "low": automated, promotional, or low-signal
+
+Respond with JSON only, no other text:
+{
+  "labels": ["label-name"],
+  "importance": "high" | "med" | "low"
+}`;
+
+
+interface UserLabel {
+  name: string;
+  description?: string;
+}
+
+interface ClassifyRequest {
+  thread_id: string;
+  subject: string;
+  body?: string;
+  from_email?: string;
+  user_labels: UserLabel[];
+}
+
+interface ClassifyResult {
+  labels: string[];
+  importance: "high" | "med" | "low";
+}
 
 Deno.serve(async (req) => {
-  const { name } = await req.json()
-  const data = {
-    message: `Hello ${name}!`,
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: CORS });
   }
 
-  return new Response(
-    JSON.stringify(data),
-    { headers: { "Content-Type": "application/json" } },
-  )
-})
+  try {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return json({ error: "Missing authorization header" }, 401);
+    }
 
-/* To invoke locally:
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+    );
 
-  1. Run `supabase start` (see: https://supabase.com/docs/reference/cli/supabase-start)
-  2. Make an HTTP request:
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) {
+      return json({ error: "Unauthorized" }, 401);
+    }
 
-  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/classify-email' \
-    --header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0' \
-    --header 'Content-Type: application/json' \
-    --data '{"name":"Functions"}'
+    const { thread_id, subject, body, from_email, user_labels }: ClassifyRequest =
+      await req.json();
 
-*/
+    if (!thread_id || !subject) {
+      return json({ error: "thread_id and subject are required" }, 400);
+    }
+
+    const apiKey = Deno.env.get("OPENROUTER_API_KEY");
+    const model = Deno.env.get("OPENROUTER_MODEL");
+
+    if (!apiKey || !model) {
+      console.error("Missing classification env vars: OPENROUTER_API_KEY or OPENROUTER_MODEL");
+      return json({ error: "Classification service not configured" }, 500);
+    }
+
+    const labelBlock = user_labels.length > 0
+      ? user_labels
+          .map((l) => (l.description ? `- ${l.name}: ${l.description}` : `- ${l.name}`))
+          .join("\n")
+      : "(none — skip label assignment, only return importance)";
+
+    const userMessage = [
+      `Available labels:\n${labelBlock}`,
+      `From: ${from_email ?? "unknown"}`,
+      `Subject: ${subject}`,
+      body ? `\n${body}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const orRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://inboxghost.app",
+        "X-Title": "InboxGhost",
+      },
+      body: JSON.stringify({
+        model,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage },
+        ],
+      }),
+    });
+
+    if (!orRes.ok) {
+      const errText = await orRes.text();
+      console.error("OpenRouter error:", errText);
+      return json({ error: "Classification request failed" }, 502);
+    }
+
+    const completion = await orRes.json();
+    const raw = completion.choices?.[0]?.message?.content ?? "{}";
+
+    let result: ClassifyResult;
+    try {
+      const parsed = JSON.parse(raw);
+      result = {
+        labels: Array.isArray(parsed.labels) ? (parsed.labels as string[]) : [],
+        importance: (["high", "med", "low"] as const).includes(parsed.importance)
+          ? parsed.importance
+          : "low",
+      };
+    } catch {
+      result = { labels: [], importance: "low" };
+    }
+
+    // Use service role to bypass RLS for the upsert
+    const serviceClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    const { error: upsertError } = await serviceClient
+      .from("email_classifications")
+      .upsert(
+        {
+          user_id: user.id,
+          thread_id,
+          labels: result.labels,
+          importance: result.importance,
+          classified_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id,thread_id" },
+      );
+
+    if (upsertError) {
+      console.error("Failed to persist classification:", upsertError.message);
+    }
+
+    return json(result, 200);
+  } catch (err) {
+    console.error("classify-email error:", err);
+    return json({ error: "Internal server error" }, 500);
+  }
+});
+
+function json(data: unknown, status: number): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...CORS, "Content-Type": "application/json" },
+  });
+}
