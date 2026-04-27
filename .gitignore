@@ -10,5 +10,4 @@ worker/node_modules
 web/.DS_Store
 web/.env.local
 web/.DS_Store
-web/tsconfig.tsbuildinfo
-web/tsconfig.tsbuildinfo
+*.tsbuildinfo
