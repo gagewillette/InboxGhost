@@ -13,6 +13,30 @@ import { supabase } from '../../supabase'
 import type { Email, EmailThread } from '../../types'
 import { fetchEmails, fetchEmailThreads, triggerEmailSync } from '../lib/emails'
 
+const CACHE_TTL_MS = 10 * 60 * 1000
+
+function cacheKey(userId: string) { return `ig_email_cache_${userId}` }
+
+function readCache(userId: string): { emails: Email[]; threads: EmailThread[] } | null {
+  try {
+    const raw = localStorage.getItem(cacheKey(userId))
+    if (!raw) return null
+    const { emails, threads, cachedAt } = JSON.parse(raw)
+    if (Date.now() - cachedAt > CACHE_TTL_MS) return null
+    return { emails, threads }
+  } catch { return null }
+}
+
+function writeCache(userId: string, emails: Email[], threads: EmailThread[]) {
+  try {
+    localStorage.setItem(cacheKey(userId), JSON.stringify({ emails, threads, cachedAt: Date.now() }))
+  } catch {} // storage full or private browsing
+}
+
+function dropCache(userId: string) {
+  try { localStorage.removeItem(cacheKey(userId)) } catch {}
+}
+
 export interface EmailContextType {
   emails: Email[]
   threads: EmailThread[]
@@ -20,6 +44,7 @@ export interface EmailContextType {
   error: string | null
   session: Session | null
   refresh: () => Promise<void>
+  clearCache: () => void
 }
 
 const EmailContext = createContext<EmailContextType | undefined>(undefined)
@@ -44,6 +69,13 @@ export const EmailProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const fetchData = useCallback(async () => {
     if (!session?.user) return
 
+    const cached = readCache(session.user.id)
+    if (cached) {
+      setEmails(cached.emails)
+      setThreads(cached.threads)
+      return
+    }
+
     setLoading(true)
     setError(null)
     try {
@@ -56,6 +88,7 @@ export const EmailProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime()
       )
 
+      writeCache(session.user.id, emailData, threadData)
       setEmails(emailData)
       setThreads(threadData)
     } catch (err) {
@@ -94,6 +127,7 @@ export const EmailProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       try {
         await triggerEmailSync(s.access_token, 0)
+        dropCache(session.user.id)
         await fetchData()
       } catch (err) {
         console.error('Auto-sync failed:', err)
@@ -103,9 +137,13 @@ export const EmailProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     autoSync()
   }, [session, fetchData])
 
+  const clearCache = useCallback(() => {
+    if (session?.user) dropCache(session.user.id)
+  }, [session])
+
   const contextValue = useMemo(
-    () => ({ emails, threads, loading, error, session, refresh: fetchData }),
-    [emails, threads, loading, error, session, fetchData]
+    () => ({ emails, threads, loading, error, session, refresh: fetchData, clearCache }),
+    [emails, threads, loading, error, session, fetchData, clearCache]
   )
 
   return (

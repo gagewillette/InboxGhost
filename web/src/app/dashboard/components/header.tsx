@@ -1,6 +1,6 @@
 "use client";
 
-import { Wifi, Trash2, LogOut } from "lucide-react";
+import { Wifi, Trash2, LogOut, Eraser } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/app/supabase";
@@ -9,7 +9,7 @@ import { triggerEmailSync, deleteAllEmails } from "../lib/emails";
 import { GhostWordmark } from "@/components/landing/GhostLogo";
 
 export default function Header() {
-  const { refresh } = useEmails();
+  const { refresh, clearCache } = useEmails();
   const router = useRouter();
   const [syncing, setSyncing] = useState(false);
   const [nuking, setNuking] = useState(false);
@@ -72,6 +72,11 @@ export default function Header() {
             danger
           />
           <div className="ig-divider-v" />
+          <HeaderButton
+            onClick={clearCache}
+            icon={<Eraser size={15} strokeWidth={1.5} />}
+            label="Clear cache"
+          />
           <HeaderButton
             onClick={handleSignOut}
             icon={<LogOut size={15} strokeWidth={1.5} />}
