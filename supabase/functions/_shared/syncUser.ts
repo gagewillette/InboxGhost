@@ -1,6 +1,7 @@
 import { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import {
-  listRecentThreads,
+  listThreadsForDay,
+  listThreadsSince,
   getThread,
   getMessage,
   refreshAccessToken,
@@ -35,9 +36,11 @@ async function fetchAccessToken(
   return accessToken;
 }
 
+// daysBack=0 fetches today, 1 fetches yesterday, etc.
 export async function syncUser(
   supabase: SupabaseClient,
-  tokenRow: GmailTokenRow
+  tokenRow: GmailTokenRow,
+  daysBack = 0
 ) {
   const accessToken = await fetchAccessToken(supabase, tokenRow);
   if (!accessToken) {
@@ -45,25 +48,71 @@ export async function syncUser(
     return;
   }
 
-  const threadsRes = await listRecentThreads(accessToken);
+  const threadsRes = await listThreadsForDay(accessToken, daysBack);
   const threads = threadsRes.threads || [];
 
   for (const thread of threads) {
     const threadData = await getThread(accessToken, thread.id);
     for (const msg of threadData.messages) {
       const fullMsg = await getMessage(accessToken, msg.id);
-      const email = parseEmail(tokenRow.user_id, fullMsg);
+      const { sender, ...emailRow } = parseEmail(tokenRow.user_id, fullMsg);
 
       await supabase
         .from("emails")
-        .upsert(email, { onConflict: "user_id,message_id" });
+        .upsert(emailRow, { onConflict: "user_id,message_id" });
 
       await supabase.from("email_threads").upsert(
         {
           user_id: tokenRow.user_id,
-          thread_id: email.thread_id,
-          subject: email.subject,
-          last_message_at: new Date(email.internal_date),
+          thread_id: emailRow.thread_id,
+          subject: emailRow.subject,
+          sender,
+          last_message_at: new Date(emailRow.internal_date),
+        },
+        { onConflict: "user_id,thread_id" }
+      );
+    }
+  }
+
+  await supabase
+    .from("gmail_tokens")
+    .update({ last_synced_at: new Date().toISOString() })
+    .eq("user_id", tokenRow.user_id);
+}
+
+// Used by the background cron: syncs all threads received after sinceEpochSeconds.
+// Avoids calendar-day boundaries so a 1AM cron doesn't miss the previous 23 hours.
+export async function syncUserSince(
+  supabase: SupabaseClient,
+  tokenRow: GmailTokenRow,
+  sinceEpochSeconds: number
+) {
+  const accessToken = await fetchAccessToken(supabase, tokenRow);
+  if (!accessToken) {
+    console.error("Access token invalid for user:", tokenRow.user_id);
+    return;
+  }
+
+  const threadsRes = await listThreadsSince(accessToken, sinceEpochSeconds);
+  const threads = threadsRes.threads || [];
+
+  for (const thread of threads) {
+    const threadData = await getThread(accessToken, thread.id);
+    for (const msg of threadData.messages) {
+      const fullMsg = await getMessage(accessToken, msg.id);
+      const { sender, ...emailRow } = parseEmail(tokenRow.user_id, fullMsg);
+
+      await supabase
+        .from("emails")
+        .upsert(emailRow, { onConflict: "user_id,message_id" });
+
+      await supabase.from("email_threads").upsert(
+        {
+          user_id: tokenRow.user_id,
+          thread_id: emailRow.thread_id,
+          subject: emailRow.subject,
+          sender,
+          last_message_at: new Date(emailRow.internal_date),
         },
         { onConflict: "user_id,thread_id" }
       );

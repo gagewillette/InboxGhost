@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { GhostLogo, GhostWordmark } from "./GhostLogo";
 import { useLenis } from "../LenisProvider";
+import FinalCTAButton from "./CTAButton";
 
 const ENVELOPES = Array.from({ length: 14 }, (_, i) => ({
   i,
@@ -48,6 +49,7 @@ export default function Hero({ onSignIn }: { onSignIn: () => void }) {
             <svg
               key={e.i}
               className="ig-env"
+              suppressHydrationWarning
               style={{
                 left: `${e.x}%`,
                 top: `${e.y}%`,
@@ -107,12 +109,7 @@ export default function Hero({ onSignIn }: { onSignIn: () => void }) {
           drafts, <span className="ig-underline">and the data</span>.
         </p>
         <div className="ig-hero-cta">
-          <button
-            className="ig-primary-btn ig-primary-btn-lg"
-            onClick={() => lenis?.scrollTo("#cta", { offset: -80 })}
-          >
-            Connect Gmail <span className="ig-arrow">→</span>
-          </button>
+          <FinalCTAButton onSignIn={onSignIn} />
           <button
             className="ig-ghost-btn ig-ghost-btn-lg"
             onClick={scrollTo("how")}

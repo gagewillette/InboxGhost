@@ -23,6 +23,9 @@ Deno.serve(async (req) => {
     });
   }
 
+  const body = await req.json().catch(() => ({}));
+  const daysBack: number = typeof body.days_back === "number" ? body.days_back : 0;
+
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -51,8 +54,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-    await syncUser(supabase, tokenRow as GmailTokenRow);
-    return new Response(JSON.stringify({ success: true }), {
+    await syncUser(supabase, tokenRow as GmailTokenRow, daysBack);
+    return new Response(JSON.stringify({ success: true, days_back: daysBack }), {
       status: 200,
       headers: { "Content-Type": "application/json", ...corsHeaders },
     });

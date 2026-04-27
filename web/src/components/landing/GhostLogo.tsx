@@ -79,8 +79,8 @@ export function GhostLogo({
 
 export function GhostWordmark({ size = 20 }: { size?: number }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--ig-fg)" }}>
-      <GhostLogo size={size * 1.4} stroke={1.6} />
+    <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--ig-accent)" }}>
+      <GhostLogo size={size * 1.4} stroke={2} />
       <span
         style={{
           fontFamily: "var(--ig-serif)",

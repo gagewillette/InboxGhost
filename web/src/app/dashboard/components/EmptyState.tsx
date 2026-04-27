@@ -1,7 +1,7 @@
 import { Inbox } from "lucide-react";
 
 type EmptyStateProps = {
-  onSync: () => void;
+  onSync: () => Promise<void>;
 };
 
 export default function EmptyState({ onSync }: EmptyStateProps) {

@@ -8,99 +8,104 @@ import {
   useMemo,
   useState,
 } from 'react'
+import { Session } from '@supabase/supabase-js'
 import { supabase } from '../../supabase'
 import type { Email, EmailThread } from '../../types'
-import { fetchEmails, fetchEmailThreads } from '../lib/emails'
-import { Session } from '@supabase/supabase-js'
+import { fetchEmails, fetchEmailThreads, triggerEmailSync } from '../lib/emails'
 
 export interface EmailContextType {
   emails: Email[]
   threads: EmailThread[]
   loading: boolean
   error: string | null
-  refresh: () => void
+  session: Session | null
+  refresh: () => Promise<void>
 }
 
 const EmailContext = createContext<EmailContextType | undefined>(undefined)
 
-export const EmailProvider: React.FC<{ children: React.ReactNode }> = ({
-  children,
-}) => {
+export const EmailProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<Session | null>(null)
   const [emails, setEmails] = useState<Email[]>([])
   const [threads, setThreads] = useState<EmailThread[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // ✅ Setup session on load
   useEffect(() => {
-    const loadSession = async () => {
-      // fetch session
-      const { data } = await supabase.auth.getSession()
-      setSession(data.session ?? null)
+    supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null))
 
-      // subscribe to auth changes
-      const {
-        data: { subscription },
-      } = supabase.auth.onAuthStateChange((_event, session) => {
-        setSession(session)
-      })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s)
+    })
 
-      // unsub from auth changes on unmount
-      return () => {
-        subscription.unsubscribe()
-      }
-    }
-
-    loadSession()
+    return () => subscription.unsubscribe()
   }, [])
 
-    const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     if (!session?.user) return
-
-    console.log("fetching data from user ", session.user);
 
     setLoading(true)
     setError(null)
     try {
-      const emailData = await fetchEmails(session.user.id);
-      const threadData = await fetchEmailThreads(session.user.id);
+      const [emailData, threadData] = await Promise.all([
+        fetchEmails(session.user.id),
+        fetchEmailThreads(session.user.id),
+      ])
 
-      // sort the emails by time, newest first
-      threadData.sort((a: EmailThread, b: EmailThread) => {
-        return new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime();
-      })
+      threadData.sort((a: EmailThread, b: EmailThread) =>
+        new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime()
+      )
 
-      setEmails(emailData ?? [])
-      setThreads(threadData ?? [])
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message)
-      } else {
-        setError('Failed to fetch data')
-      }
+      setEmails(emailData)
+      setThreads(threadData)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch data')
     } finally {
       setLoading(false)
     }
   }, [session])
 
-  // Fetch data whenever we have a valid session
   useEffect(() => {
-    if (session?.user) {
-      console.log('user is valid, fetching data')
-      fetchData()
+    if (!session?.user) return
+
+    // Load from DB immediately so the UI isn't blocked on the sync.
+    fetchData()
+
+    // Then check if a background sync is needed (stale > 2 hours).
+    const autoSync = async () => {
+      const TWO_HOURS_MS = 2 * 60 * 60 * 1000
+
+      const { data: tokenRow } = await supabase
+        .from('gmail_tokens')
+        .select('last_synced_at')
+        .eq('user_id', session.user.id)
+        .single()
+
+      if (!tokenRow) return
+
+      const lastSynced = tokenRow.last_synced_at
+        ? new Date(tokenRow.last_synced_at).getTime()
+        : 0
+
+      if (Date.now() - lastSynced <= TWO_HOURS_MS) return
+
+      const { data: { session: s } } = await supabase.auth.getSession()
+      if (!s?.access_token) return
+
+      try {
+        await triggerEmailSync(s.access_token, 0)
+        await fetchData()
+      } catch (err) {
+        console.error('Auto-sync failed:', err)
+      }
     }
+
+    autoSync()
   }, [session, fetchData])
 
   const contextValue = useMemo(
-    () => ({
-      emails,
-      threads,
-      loading,
-      error,
-      refresh: fetchData,
-    }),
-    [emails, threads, loading, error, fetchData]
+    () => ({ emails, threads, loading, error, session, refresh: fetchData }),
+    [emails, threads, loading, error, session, fetchData]
   )
 
   return (
