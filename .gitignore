@@ -11,3 +11,7 @@ web/.DS_Store
 web/.env.local
 web/.DS_Store
 *.tsbuildinfo
+
+.vscode/
+
+DS_Store
