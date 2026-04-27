@@ -16,6 +16,7 @@ export interface EmailThread {
   user_id: string;
   thread_id: string;
   subject: string;
+  sender: string;
   last_message_at: string; // ISO string
   importance?: "high" | "med" | "low"; // AI-scored, pending implementation
 }

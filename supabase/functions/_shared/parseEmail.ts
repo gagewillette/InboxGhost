@@ -37,11 +37,21 @@ function extractEmail(addr: string | undefined) {
   return match ? match[1] : addr;
 }
 
+// Returns the display name if present ("John Doe <j@x.com>" → "John Doe"),
+// otherwise falls back to the bare email address.
+function extractSender(addr: string | undefined) {
+  if (!addr) return "";
+  const nameMatch = addr.match(/^"?([^"<]+)"?\s*</);
+  if (nameMatch) return nameMatch[1].trim();
+  return extractEmail(addr);
+}
+
 export interface ParsedEmail {
   user_id: string;
   thread_id: string;
   message_id: string;
   from_email: string;
+  sender: string;
   to_emails: string[];
   subject: string;
   snippet: string;
@@ -59,12 +69,14 @@ export default function parseEmail(userId: string, msg: any): ParsedEmail {
     .map((e: string) => extractEmail(e.trim()))
     .filter(Boolean);
   const fromEmail = extractEmail(headers["from"]);
+  const sender = extractSender(headers["from"]);
 
   return {
     user_id: userId,
     thread_id: msg.threadId,
     message_id: msg.id,
     from_email: fromEmail,
+    sender,
     to_emails: toEmails,
     subject: headers["subject"] || "",
     snippet: msg.snippet || "",

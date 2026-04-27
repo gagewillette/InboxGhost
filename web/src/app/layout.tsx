@@ -19,7 +19,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "InboxGhost — A ghost for your inbox",
+  title: "Inbox Ghost",
   description: "Your replies. Your rules. AI that sounds like you, not a chatbot.",
 };
 

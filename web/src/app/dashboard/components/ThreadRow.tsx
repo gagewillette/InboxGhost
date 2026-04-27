@@ -50,7 +50,7 @@ export default function ThreadRow({ thread }: ThreadRowProps) {
             <span className="ig-thread-time">{formatRelativeTime(thread.last_message_at)}</span>
           </div>
         </div>
-        <span className="ig-thread-id">{thread.thread_id}</span>
+        <span className="ig-thread-sender">{thread.sender}</span>
       </div>
     </div>
   );

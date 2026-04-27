@@ -1477,7 +1477,7 @@ kbd {
   white-space: nowrap;
 }
 
-.ig-thread-id {
+.ig-thread-sender {
   font-size: 11px;
   color: var(--ig-fg-muted);
   font-family: var(--ig-mono);

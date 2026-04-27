@@ -66,6 +66,7 @@ export async function syncUser(
           user_id: tokenRow.user_id,
           thread_id: email.thread_id,
           subject: email.subject,
+          sender: email.sender,
           last_message_at: new Date(email.internal_date),
         },
         { onConflict: "user_id,thread_id" }
@@ -110,6 +111,7 @@ export async function syncUserSince(
           user_id: tokenRow.user_id,
           thread_id: email.thread_id,
           subject: email.subject,
+          sender: email.sender,
           last_message_at: new Date(email.internal_date),
         },
         { onConflict: "user_id,thread_id" }
