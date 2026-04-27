@@ -1626,3 +1626,111 @@ kbd {
   .ig-header-btn span { display: none; }
   .ig-header-btn { padding: 6px 8px; }
 }
+
+/* ---------- Gmail connect banner ---------- */
+
+.ig-connect-banner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 24px;
+  padding: 20px 24px;
+  border-radius: 12px;
+  border: 1px solid var(--ig-border);
+  background: var(--ig-panel);
+}
+
+.ig-connect-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid var(--ig-border);
+  background: var(--ig-bg-2);
+  color: var(--ig-accent);
+  flex-shrink: 0;
+}
+
+.ig-connect-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.ig-connect-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ig-fg);
+  margin: 0 0 4px;
+}
+
+.ig-connect-sub {
+  font-size: 13px;
+  color: var(--ig-fg-muted);
+  margin: 0;
+}
+
+.ig-btn-accent {
+  padding: 8px 18px;
+  border-radius: 8px;
+  border: 1px solid var(--ig-accent);
+  background: oklch(0.86 0.14 170 / 0.12);
+  color: var(--ig-accent);
+  font-family: var(--ig-sans);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 150ms ease;
+  flex-shrink: 0;
+}
+
+.ig-btn-accent:hover {
+  background: oklch(0.86 0.14 170 / 0.22);
+}
+
+@media (max-width: 640px) {
+  .ig-connect-banner { flex-wrap: wrap; }
+}
+
+/* ---------- Load more ---------- */
+
+.ig-load-more {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 0 8px;
+  gap: 12px;
+}
+
+.ig-load-more-label {
+  font-size: 12px;
+  color: var(--ig-fg-muted);
+}
+
+.ig-load-more-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--ig-border);
+  background: transparent;
+  color: var(--ig-fg-dim);
+  font-family: var(--ig-sans);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.ig-load-more-btn:hover:not(:disabled) {
+  background: var(--ig-panel);
+  color: var(--ig-fg);
+}
+
+.ig-load-more-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

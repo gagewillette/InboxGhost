@@ -31,10 +31,41 @@ async function gmailRequest<T>(accessToken: string, path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export function listRecentThreads(accessToken: string) {
+// Format a Date as YYYY/MM/DD for Gmail search queries
+function toGmailDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}/${m}/${day}`;
+}
+
+// daysBack=0 → today, daysBack=1 → yesterday, etc.
+export function listThreadsForDay(accessToken: string, daysBack: number) {
+  const after = new Date();
+  after.setDate(after.getDate() - daysBack);       // start of target day
+  const before = new Date();
+  before.setDate(before.getDate() - daysBack + 1); // start of day after target
+
+  const q = encodeURIComponent(
+    `in:inbox -category:social -category:promotions after:${toGmailDate(after)} before:${toGmailDate(before)}`
+  );
+
   return gmailRequest<{ threads?: { id: string }[] }>(
     accessToken,
-    "/users/me/threads?maxResults=100&q=in:inbox -category:social -category:promotions newer_than:1d"
+    `/users/me/threads?maxResults=100&q=${q}`
+  );
+}
+
+// Fetch threads received after a specific Unix timestamp (seconds).
+// More precise than day-based queries — used by the background cron sync.
+export function listThreadsSince(accessToken: string, sinceEpochSeconds: number) {
+  const q = encodeURIComponent(
+    `in:inbox -category:social -category:promotions after:${sinceEpochSeconds}`
+  );
+
+  return gmailRequest<{ threads?: { id: string }[] }>(
+    accessToken,
+    `/users/me/threads?maxResults=100&q=${q}`
   );
 }
 

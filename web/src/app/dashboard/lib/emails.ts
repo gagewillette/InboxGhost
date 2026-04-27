@@ -39,7 +39,7 @@ function decodeHtmlEntities(str: string) {
 
 
 
-export async function triggerEmailSync(accessToken: string) {
+export async function triggerEmailSync(accessToken: string, daysBack = 0) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const res = await fetch(`${supabaseUrl}/functions/v1/fetch-new-emails`, {
     method: 'POST',
@@ -47,6 +47,7 @@ export async function triggerEmailSync(accessToken: string) {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${accessToken}`,
     },
+    body: JSON.stringify({ days_back: daysBack }),
   });
 
   if (!res.ok) {

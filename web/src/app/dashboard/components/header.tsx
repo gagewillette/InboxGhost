@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/app/supabase";
 import { useEmails } from "../contexts/email_context";
 import { triggerEmailSync, deleteAllEmails } from "../lib/emails";
-import { GhostLogo, GhostWordmark } from "@/components/landing/GhostLogo";
+import { GhostWordmark } from "@/components/landing/GhostLogo";
 
 export default function Header() {
   const { refresh } = useEmails();
@@ -55,10 +55,7 @@ export default function Header() {
   return (
     <header className="ig-header">
       <div className="ig-header-inner">
-        <div className="ig-brand">
-          <GhostLogo size={26} stroke={1.5} eyes={false} />
-          <GhostWordmark size={15} />
-        </div>
+        <GhostWordmark size={20} />
 
         <nav className="ig-header-actions">
           <HeaderButton

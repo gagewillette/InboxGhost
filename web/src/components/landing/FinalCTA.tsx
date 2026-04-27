@@ -1,3 +1,4 @@
+import FinalCTAButton from "./CTAButton";
 import { GhostLogo } from "./GhostLogo";
 
 export default function FinalCTA({ onSignIn }: { onSignIn: () => void }) {
@@ -16,9 +17,7 @@ export default function FinalCTA({ onSignIn }: { onSignIn: () => void }) {
           14 days free, no card required. Takes about 90 seconds to connect Gmail and train your voice.
         </p>
         <div className="ig-hero-cta">
-          <button className="ig-primary-btn ig-primary-btn-lg" onClick={onSignIn}>
-            Connect Gmail <span className="ig-arrow">→</span>
-          </button>
+          <FinalCTAButton onSignIn={onSignIn} />
           <button className="ig-ghost-btn ig-ghost-btn-lg">Book a walkthrough</button>
         </div>
         <div className="ig-cta-meta">
