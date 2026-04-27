@@ -5,6 +5,7 @@ import type { EmailThread } from "@/app/types";
 
 type ThreadRowProps = {
   thread: EmailThread;
+  onClick: () => void;
 };
 
 function formatRelativeTime(iso: string): string {
@@ -35,9 +36,15 @@ function ImportanceBadge({ level }: { level?: "high" | "med" | "low" }) {
   );
 }
 
-export default function ThreadRow({ thread }: ThreadRowProps) {
+export default function ThreadRow({ thread, onClick }: ThreadRowProps) {
   return (
-    <div className="ig-thread-row" role="listitem" tabIndex={0}>
+    <div
+      className="ig-thread-row"
+      role="listitem"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => e.key === "Enter" && onClick()}
+    >
       <div className="ig-thread-icon">
         <Mail size={15} strokeWidth={1.5} />
       </div>

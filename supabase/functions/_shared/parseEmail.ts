@@ -8,16 +8,28 @@ function decodeBase64(data: string): string {
   return new TextDecoder().decode(bytes);
 }
 
+// Recursively find the first part matching a MIME type in nested multipart trees.
+function findPart(parts: any[], mimeType: string): any {
+  for (const part of parts) {
+    if (part.mimeType === mimeType && part.body?.data) return part;
+    if (part.parts) {
+      const found = findPart(part.parts, mimeType);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
 function getBody(payload: any): string {
   if (!payload) return "";
   if (payload.parts) {
-    for (const part of payload.parts) {
-      if (part.mimeType === "text/plain" && part.body?.data) {
-        return decodeBase64(part.body.data);
-      }
-    }
-    const partWithData = payload.parts.find((p: any) => p.body?.data);
-    if (partWithData) return decodeBase64(partWithData.body.data);
+    // Prefer plain text; fall back to HTML; last resort any part with data.
+    const plain = findPart(payload.parts, "text/plain");
+    if (plain) return decodeBase64(plain.body.data);
+    const html = findPart(payload.parts, "text/html");
+    if (html) return decodeBase64(html.body.data);
+    const any = payload.parts.find((p: any) => p.body?.data);
+    if (any) return decodeBase64(any.body.data);
   }
   if (payload.body?.data) return decodeBase64(payload.body.data);
   return "";

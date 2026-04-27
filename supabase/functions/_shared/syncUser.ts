@@ -55,19 +55,19 @@ export async function syncUser(
     const threadData = await getThread(accessToken, thread.id);
     for (const msg of threadData.messages) {
       const fullMsg = await getMessage(accessToken, msg.id);
-      const email = parseEmail(tokenRow.user_id, fullMsg);
+      const { sender, ...emailRow } = parseEmail(tokenRow.user_id, fullMsg);
 
       await supabase
         .from("emails")
-        .upsert(email, { onConflict: "user_id,message_id" });
+        .upsert(emailRow, { onConflict: "user_id,message_id" });
 
       await supabase.from("email_threads").upsert(
         {
           user_id: tokenRow.user_id,
-          thread_id: email.thread_id,
-          subject: email.subject,
-          sender: email.sender,
-          last_message_at: new Date(email.internal_date),
+          thread_id: emailRow.thread_id,
+          subject: emailRow.subject,
+          sender,
+          last_message_at: new Date(emailRow.internal_date),
         },
         { onConflict: "user_id,thread_id" }
       );
@@ -100,19 +100,19 @@ export async function syncUserSince(
     const threadData = await getThread(accessToken, thread.id);
     for (const msg of threadData.messages) {
       const fullMsg = await getMessage(accessToken, msg.id);
-      const email = parseEmail(tokenRow.user_id, fullMsg);
+      const { sender, ...emailRow } = parseEmail(tokenRow.user_id, fullMsg);
 
       await supabase
         .from("emails")
-        .upsert(email, { onConflict: "user_id,message_id" });
+        .upsert(emailRow, { onConflict: "user_id,message_id" });
 
       await supabase.from("email_threads").upsert(
         {
           user_id: tokenRow.user_id,
-          thread_id: email.thread_id,
-          subject: email.subject,
-          sender: email.sender,
-          last_message_at: new Date(email.internal_date),
+          thread_id: emailRow.thread_id,
+          subject: emailRow.subject,
+          sender,
+          last_message_at: new Date(emailRow.internal_date),
         },
         { onConflict: "user_id,thread_id" }
       );

@@ -1734,3 +1734,183 @@ kbd {
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+/* ---------- Email Drawer ---------- */
+
+.ig-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+
+}
+.ig-drawer-overlay.is-open { pointer-events: auto; }
+
+.ig-drawer-backdrop {
+  position: absolute;
+  inset: 0;
+  background: oklch(0 0 0 / 0.55);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+
+}
+.ig-drawer-overlay.is-open .ig-drawer-backdrop { opacity: 1; }
+
+.ig-drawer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 92vh;
+  background: var(--ig-bg-2);
+  border-radius: 20px 20px 0 0;
+  border-top: 1px solid var(--ig-border);
+  display: flex;
+  flex-direction: column;
+  transform: translateY(100%);
+  transition: transform 0.38s cubic-bezier(0.32, 0.72, 0, 1);
+  overflow: hidden;
+  
+
+  /* TODO: Think about removing this */
+  padding-left: 10%;
+  padding-right: 10%;
+}
+.ig-drawer-overlay.is-open .ig-drawer { transform: translateY(0); }
+
+.ig-drawer-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--ig-border);
+  margin: 12px auto 0;
+  flex-shrink: 0;
+}
+
+.ig-drawer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 24px 12px;
+  border-bottom: 1px solid var(--ig-border-soft);
+  flex-shrink: 0;
+}
+.ig-drawer-subject {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  flex: 1;
+}
+.ig-drawer-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--ig-border);
+  background: transparent;
+  color: var(--ig-fg-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.1s ease, color 0.1s ease;
+}
+.ig-drawer-close:hover { background: var(--ig-panel); color: var(--ig-fg); }
+
+.ig-drawer-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 24px;
+  border-bottom: 1px solid var(--ig-border-soft);
+  flex-shrink: 0;
+}
+.ig-drawer-sender { font-size: 13px; color: var(--ig-fg-dim); font-weight: 500; }
+.ig-drawer-time {
+  font-size: 11.5px;
+  color: var(--ig-fg-muted);
+  font-family: var(--ig-mono);
+  margin-left: auto;
+}
+
+.ig-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+  font-size: 13.5px;
+  line-height: 1.75;
+  color: var(--ig-fg-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ig-drawer-body::-webkit-scrollbar { width: 4px; }
+.ig-drawer-body::-webkit-scrollbar-track { background: transparent; }
+.ig-drawer-body::-webkit-scrollbar-thumb { background: var(--ig-border); border-radius: 2px; }
+
+.ig-drawer-footer {
+  padding: 12px 24px 24px;
+  border-top: 1px solid var(--ig-border-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.ig-drawer-importance { display: flex; align-items: center; gap: 6px; }
+.ig-drawer-importance-label { font-size: 11px; color: var(--ig-fg-muted); margin-right: 2px; }
+
+.ig-imp-btn {
+  padding: 3px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.ig-imp-btn--high { color: var(--ig-danger); border-color: oklch(0.7 0.17 25 / 0.3); }
+.ig-imp-btn--high:hover,
+.ig-imp-btn--high.is-active { background: oklch(0.7 0.17 25 / 0.12); }
+.ig-imp-btn--med { color: oklch(0.85 0.14 85); border-color: oklch(0.85 0.14 85 / 0.3); }
+.ig-imp-btn--med:hover,
+.ig-imp-btn--med.is-active { background: oklch(0.85 0.14 85 / 0.12); }
+.ig-imp-btn--low { color: var(--ig-fg-muted); border-color: var(--ig-border-soft); }
+.ig-imp-btn--low:hover,
+.ig-imp-btn--low.is-active { background: var(--ig-panel); }
+
+.ig-drawer-actions { display: flex; gap: 8px; }
+.ig-drawer-actions .ig-ghost-btn,
+.ig-drawer-actions .ig-btn-accent {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .ig-drawer-header,
+  .ig-drawer-meta,
+  .ig-drawer-body,
+  .ig-drawer-footer { padding-left: 16px; padding-right: 16px; }
+  .ig-drawer { height: 94vh; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ig-drawer { transition: none; }
+  .ig-drawer-backdrop { transition: none; }
+}
+
+/* ---------- HTML email iframe ---------- */
+
+.ig-email-frame {
+  width: 100%;
+  border: none;
+  display: block;
+  background: transparent;
+  transition: height 0.15s ease;
+}

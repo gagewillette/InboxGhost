@@ -10,7 +10,8 @@ import FilterBar from "./FilterBar";
 import ThreadRow from "./ThreadRow";
 import EmptyState from "./EmptyState";
 import GmailConnect from "./GmailConnect";
-import type { ImportanceFilter } from "@/app/types";
+import EmailDrawer from "./EmailDrawer";
+import type { ImportanceFilter, EmailThread } from "@/app/types";
 
 export default function EmailViewer() {
   const { threads, loading, refresh, session } = useEmails();
@@ -18,6 +19,7 @@ export default function EmailViewer() {
   const [daysBack, setDaysBack] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [selectedThread, setSelectedThread] = useState<EmailThread | null>(null);
   const userId = session?.user?.id ?? null;
   const gmailStatus = useGmailStatus(userId);
 
@@ -85,7 +87,11 @@ export default function EmailViewer() {
           <EmptyState onSync={handleSync} />
         ) : (
           filtered.map((thread) => (
-            <ThreadRow key={thread.thread_id} thread={thread} />
+            <ThreadRow
+              key={thread.thread_id}
+              thread={thread}
+              onClick={() => setSelectedThread(thread)}
+            />
           ))
         )}
       </div>
@@ -105,6 +111,11 @@ export default function EmailViewer() {
           </button>
         </div>
       )}
+
+      <EmailDrawer
+        thread={selectedThread}
+        onClose={() => setSelectedThread(null)}
+      />
     </div>
   );
 }
