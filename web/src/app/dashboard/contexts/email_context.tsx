@@ -145,13 +145,18 @@ export const EmailProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     autoSync()
   }, [session, fetchData])
 
+  const refresh = useCallback(async () => {
+    if (session?.user) dropCache(session.user.id)
+    await fetchData()
+  }, [session, fetchData])
+
   const clearCache = useCallback(() => {
     if (session?.user) dropCache(session.user.id)
   }, [session])
 
   const contextValue = useMemo(
-    () => ({ emails, threads, loading, error, session, refresh: fetchData, clearCache }),
-    [emails, threads, loading, error, session, fetchData, clearCache]
+    () => ({ emails, threads, loading, error, session, refresh, clearCache }),
+    [emails, threads, loading, error, session, refresh, clearCache]
   )
 
   return (
