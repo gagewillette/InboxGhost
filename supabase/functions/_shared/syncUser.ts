@@ -1,126 +1,95 @@
 import { SupabaseClient } from "jsr:@supabase/supabase-js@2";
-import {
-  listThreadsForDay,
-  listThreadsSince,
-  getThread,
-  getMessage,
-  refreshAccessToken,
-} from "./gmail.ts";
+import { listThreadsForDay, listThreadsSince, getThread, getMessage } from "./gmailApi.ts";
+import { getValidAccessToken, TokenRevokedError } from "./gmailAuth.ts";
+import { GmailTokenRow } from "./types.ts";
 import parseEmail from "./parseEmail.ts";
 
-export interface GmailTokenRow {
-  user_id: string;
-  access_token: string;
-  refresh_token: string;
-  expires_at: number;
-  created_at: string;
-  updated_at: string;
-  last_synced_at: string | null;
-}
+export type { GmailTokenRow } from "./types.ts";
 
-async function fetchAccessToken(
+async function upsertThreadMessages(
   supabase: SupabaseClient,
-  tokenRow: GmailTokenRow
-): Promise<string | null> {
-  let accessToken = tokenRow.access_token;
-  if (tokenRow.expires_at * 1000 <= Date.now()) {
-    const refreshed = await refreshAccessToken(tokenRow.refresh_token);
-    if (!refreshed) return null;
-    accessToken = refreshed.access_token;
-    const expires_at = Math.floor(Date.now() / 1000) + refreshed.expires_in;
-    await supabase
-      .from("gmail_tokens")
-      .update({ access_token: accessToken, expires_at })
-      .eq("user_id", tokenRow.user_id);
+  userId: string,
+  accessToken: string,
+  threads: { id: string }[]
+): Promise<void> {
+  for (const thread of threads) {
+    const threadData = await getThread(accessToken, thread.id);
+    for (const msg of threadData.messages) {
+      const fullMsg = await getMessage(accessToken, msg.id);
+      const { sender, ...emailRow } = parseEmail(userId, fullMsg);
+
+      await supabase
+        .from("emails")
+        .upsert(emailRow, { onConflict: "user_id,message_id" });
+
+      await supabase.from("email_threads").upsert(
+        {
+          user_id: userId,
+          thread_id: emailRow.thread_id,
+          subject: emailRow.subject,
+          sender,
+          last_message_at: new Date(emailRow.internal_date),
+        },
+        { onConflict: "user_id,thread_id" }
+      );
+    }
   }
-  return accessToken;
 }
 
-// daysBack=0 fetches today, 1 fetches yesterday, etc.
+async function markSynced(supabase: SupabaseClient, userId: string): Promise<void> {
+  await supabase
+    .from("gmail_tokens")
+    .update({ last_synced_at: new Date().toISOString() })
+    .eq("user_id", userId);
+}
+
+/**
+ * Syncs one day's inbox threads for a user. daysBack=0 → today, 1 → yesterday.
+ */
 export async function syncUser(
   supabase: SupabaseClient,
   tokenRow: GmailTokenRow,
   daysBack = 0
-) {
-  const accessToken = await fetchAccessToken(supabase, tokenRow);
-  if (!accessToken) {
-    console.error("Access token invalid for user:", tokenRow.user_id);
-    return;
-  }
-
-  const threadsRes = await listThreadsForDay(accessToken, daysBack);
-  const threads = threadsRes.threads || [];
-
-  for (const thread of threads) {
-    const threadData = await getThread(accessToken, thread.id);
-    for (const msg of threadData.messages) {
-      const fullMsg = await getMessage(accessToken, msg.id);
-      const { sender, ...emailRow } = parseEmail(tokenRow.user_id, fullMsg);
-
-      await supabase
-        .from("emails")
-        .upsert(emailRow, { onConflict: "user_id,message_id" });
-
-      await supabase.from("email_threads").upsert(
-        {
-          user_id: tokenRow.user_id,
-          thread_id: emailRow.thread_id,
-          subject: emailRow.subject,
-          sender,
-          last_message_at: new Date(emailRow.internal_date),
-        },
-        { onConflict: "user_id,thread_id" }
-      );
-    }
-  }
-
-  await supabase
-    .from("gmail_tokens")
-    .update({ last_synced_at: new Date().toISOString() })
-    .eq("user_id", tokenRow.user_id);
+): Promise<void> {
+  const accessToken = await getValidAccessToken(supabase, tokenRow);
+  const { threads = [] } = await listThreadsForDay(accessToken, daysBack);
+  await upsertThreadMessages(supabase, tokenRow.user_id, accessToken, threads);
+  await markSynced(supabase, tokenRow.user_id);
 }
 
-// Used by the background cron: syncs all threads received after sinceEpochSeconds.
-// Avoids calendar-day boundaries so a 1AM cron doesn't miss the previous 23 hours.
+/**
+ * Syncs inbox threads for a contiguous range of days. fromDay through toDay
+ * inclusive (both relative to today: 0=today, 1=yesterday, etc.). Fetches each
+ * day independently so Gmail's per-day query windows stay accurate, but only
+ * refreshes the token and updates last_synced_at once for the whole range.
+ */
+export async function syncUserDayRange(
+  supabase: SupabaseClient,
+  tokenRow: GmailTokenRow,
+  fromDay: number,
+  toDay: number
+): Promise<void> {
+  const accessToken = await getValidAccessToken(supabase, tokenRow);
+  for (let day = fromDay; day <= toDay; day++) {
+    const { threads = [] } = await listThreadsForDay(accessToken, day);
+    await upsertThreadMessages(supabase, tokenRow.user_id, accessToken, threads);
+  }
+  await markSynced(supabase, tokenRow.user_id);
+}
+
+/**
+ * Syncs all inbox threads since sinceEpochSeconds for a user.
+ * Called by the `sync-all-users` cron function.
+ */
 export async function syncUserSince(
   supabase: SupabaseClient,
   tokenRow: GmailTokenRow,
   sinceEpochSeconds: number
-) {
-  const accessToken = await fetchAccessToken(supabase, tokenRow);
-  if (!accessToken) {
-    console.error("Access token invalid for user:", tokenRow.user_id);
-    return;
-  }
-
-  const threadsRes = await listThreadsSince(accessToken, sinceEpochSeconds);
-  const threads = threadsRes.threads || [];
-
-  for (const thread of threads) {
-    const threadData = await getThread(accessToken, thread.id);
-    for (const msg of threadData.messages) {
-      const fullMsg = await getMessage(accessToken, msg.id);
-      const { sender, ...emailRow } = parseEmail(tokenRow.user_id, fullMsg);
-
-      await supabase
-        .from("emails")
-        .upsert(emailRow, { onConflict: "user_id,message_id" });
-
-      await supabase.from("email_threads").upsert(
-        {
-          user_id: tokenRow.user_id,
-          thread_id: emailRow.thread_id,
-          subject: emailRow.subject,
-          sender,
-          last_message_at: new Date(emailRow.internal_date),
-        },
-        { onConflict: "user_id,thread_id" }
-      );
-    }
-  }
-
-  await supabase
-    .from("gmail_tokens")
-    .update({ last_synced_at: new Date().toISOString() })
-    .eq("user_id", tokenRow.user_id);
+): Promise<void> {
+  const accessToken = await getValidAccessToken(supabase, tokenRow);
+  const { threads = [] } = await listThreadsSince(accessToken, sinceEpochSeconds);
+  await upsertThreadMessages(supabase, tokenRow.user_id, accessToken, threads);
+  await markSynced(supabase, tokenRow.user_id);
 }
+
+export { TokenRevokedError };

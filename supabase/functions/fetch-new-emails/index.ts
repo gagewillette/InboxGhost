@@ -1,30 +1,18 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { syncUser, GmailTokenRow } from "../_shared/syncUser.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
-};
+import { syncUser, syncUserDayRange } from "../_shared/syncUser.ts";
+import { json, corsOk } from "../_shared/cors.ts";
+import type { GmailTokenRow } from "../_shared/types.ts";
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("OK", { status: 200, headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return corsOk();
 
-  const authHeader = req.headers.get("Authorization") || "";
-  const token = authHeader.replace("Bearer ", "");
-
-  if (!token) {
-    return new Response(JSON.stringify({ error: "Missing access token" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
-    });
-  }
+  const token = req.headers.get("Authorization")?.replace("Bearer ", "");
+  if (!token) return json({ error: "Missing access token" }, 401);
 
   const body = await req.json().catch(() => ({}));
-  const daysBack: number = typeof body.days_back === "number" ? body.days_back : 0;
+  const fromDay: number = typeof body.from_day === "number" ? body.from_day : 0;
+  const toDay: number = typeof body.to_day === "number" ? body.to_day : fromDay;
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -32,13 +20,7 @@ Deno.serve(async (req) => {
   );
 
   const { data: { user }, error } = await supabase.auth.getUser(token);
-
-  if (error || !user) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
-    });
-  }
+  if (error || !user) return json({ error: "Unauthorized" }, 401);
 
   const { data: tokenRow, error: tokenError } = await supabase
     .from("gmail_tokens")
@@ -46,24 +28,17 @@ Deno.serve(async (req) => {
     .eq("user_id", user.id)
     .single();
 
-  if (tokenError || !tokenRow) {
-    return new Response(JSON.stringify({ error: "Gmail not connected" }), {
-      status: 404,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
-    });
-  }
+  if (tokenError || !tokenRow) return json({ error: "Gmail not connected" }, 404);
 
   try {
-    await syncUser(supabase, tokenRow as GmailTokenRow, daysBack);
-    return new Response(JSON.stringify({ success: true, days_back: daysBack }), {
-      status: 200,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
-    });
-  } catch (err: any) {
+    if (fromDay === 0 && toDay === 0) {
+      await syncUser(supabase, tokenRow as GmailTokenRow, 0);
+    } else {
+      await syncUserDayRange(supabase, tokenRow as GmailTokenRow, fromDay, toDay);
+    }
+    return json({ success: true, from_day: fromDay, to_day: toDay }, 200);
+  } catch (err) {
     console.error("Sync failed:", err);
-    return new Response(JSON.stringify({ error: "Failed to sync inbox" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
-    });
+    return json({ error: "Failed to sync inbox" }, 500);
   }
 });

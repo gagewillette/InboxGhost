@@ -39,7 +39,7 @@ function decodeHtmlEntities(str: string) {
 
 
 
-export async function triggerEmailSync(accessToken: string, daysBack = 0) {
+export async function triggerEmailSync(accessToken: string, fromDay = 0, toDay = fromDay) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const res = await fetch(`${supabaseUrl}/functions/v1/fetch-new-emails`, {
     method: 'POST',
@@ -47,12 +47,30 @@ export async function triggerEmailSync(accessToken: string, daysBack = 0) {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${accessToken}`,
     },
-    body: JSON.stringify({ days_back: daysBack }),
+    body: JSON.stringify({ from_day: fromDay, to_day: toDay }),
   });
 
   if (!res.ok) {
     const error = await res.text();
     throw new Error(`Failed to trigger sync: ${error}`);
+  }
+
+  return res.json();
+}
+
+export async function refreshGmailToken(accessToken: string) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const res = await fetch(`${supabaseUrl}/functions/v1/refresh-gmail-token`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(`Failed to refresh Gmail token: ${error}`);
   }
 
   return res.json();

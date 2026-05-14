@@ -1,15 +1,17 @@
 "use client";
 
-import { Wifi, Trash2, LogOut } from "lucide-react";
+import { Wifi, Trash2, LogOut, Eraser, Settings } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { supabase } from "@/app/supabase";
 import { useEmails } from "../contexts/email_context";
 import { triggerEmailSync, deleteAllEmails } from "../lib/emails";
+import { resetFetchedDaysBack } from "./email_viewer";
 import { GhostWordmark } from "@/components/landing/GhostLogo";
 
 export default function Header() {
-  const { refresh } = useEmails();
+  const { refresh, clearCache, session } = useEmails();
   const router = useRouter();
   const [syncing, setSyncing] = useState(false);
   const [nuking, setNuking] = useState(false);
@@ -39,6 +41,7 @@ export default function Header() {
     setNuking(true);
     try {
       await deleteAllEmails(token);
+      if (session?.user?.id) resetFetchedDaysBack(session.user.id);
       await refresh();
     } catch (err) {
       console.error("Nuke failed:", err);
@@ -71,6 +74,16 @@ export default function Header() {
             label={nuking ? "Nuking…" : "Nuke DB"}
             danger
           />
+          <div className="ig-divider-v" />
+          <HeaderButton
+            onClick={clearCache}
+            icon={<Eraser size={15} strokeWidth={1.5} />}
+            label="Clear cache"
+          />
+          <Link href="/dashboard/settings" className="ig-header-btn" aria-label="Settings">
+            <Settings size={15} strokeWidth={1.5} />
+            <span>Settings</span>
+          </Link>
           <div className="ig-divider-v" />
           <HeaderButton
             onClick={handleSignOut}

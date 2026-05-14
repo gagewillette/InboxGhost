@@ -22,3 +22,10 @@ export interface EmailThread {
 }
 
 export type ImportanceFilter = "all" | "high" | "med" | "low";
+
+export interface UserLabel {
+  id: string;
+  name: string;
+  color: string;
+  description?: string;
+}

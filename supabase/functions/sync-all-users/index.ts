@@ -1,8 +1,18 @@
+/**
+ * sync-all-users — background cron edge function
+ *
+ * Iterates every row in `gmail_tokens` and syncs each user's inbox forward
+ * from their last_synced_at timestamp. Invoked on a schedule via the service-
+ * role key — not callable by end users.
+ *
+ * Per-user errors are caught individually so one bad token doesn't abort the
+ * run. Lookback is capped at 24 hours to bound Gmail API quota usage.
+ */
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { syncUserSince, GmailTokenRow } from "../_shared/syncUser.ts";
+import { syncUserSince, TokenRevokedError } from "../_shared/syncUser.ts";
+import type { GmailTokenRow } from "../_shared/types.ts";
 
-// Never look back further than 24 hours to bound compute and API quota.
 const MAX_LOOKBACK_SECONDS = 24 * 60 * 60;
 
 Deno.serve(async () => {
@@ -25,8 +35,6 @@ Deno.serve(async () => {
   const results: { user_id: string; status: string; since_seconds?: number }[] = [];
 
   for (const row of data as GmailTokenRow[]) {
-    // Fetch from last_synced_at forward. If never synced or last sync was
-    // over 24h ago, cap at 24h — don't blast the Gmail API on every tick.
     const lastSyncedSeconds = row.last_synced_at
       ? Math.floor(new Date(row.last_synced_at).getTime() / 1000)
       : null;
@@ -38,9 +46,14 @@ Deno.serve(async () => {
     try {
       await syncUserSince(supabase, row, sinceSeconds);
       results.push({ user_id: row.user_id, status: "ok", since_seconds: sinceSeconds });
-    } catch (err: any) {
-      console.error("Error syncing user", row.user_id, err);
-      results.push({ user_id: row.user_id, status: "error" });
+    } catch (err) {
+      if (err instanceof TokenRevokedError) {
+        console.warn("Revoked token removed for user", row.user_id, "— re-auth required");
+        results.push({ user_id: row.user_id, status: "revoked" });
+      } else {
+        console.error("Error syncing user", row.user_id, err);
+        results.push({ user_id: row.user_id, status: "error" });
+      }
     }
   }
 
