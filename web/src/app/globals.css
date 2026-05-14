@@ -1735,6 +1735,29 @@ kbd {
   cursor: not-allowed;
 }
 
+.ig-days-input {
+  width: 52px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--ig-border);
+  background: transparent;
+  color: var(--ig-fg);
+  font-family: var(--ig-sans);
+  font-size: 13px;
+  text-align: center;
+  appearance: textfield;
+}
+
+.ig-days-input::-webkit-inner-spin-button,
+.ig-days-input::-webkit-outer-spin-button {
+  appearance: none;
+}
+
+.ig-days-input:focus {
+  outline: none;
+  border-color: var(--ig-accent);
+}
+
 /* ---------- Email Drawer ---------- */
 
 .ig-drawer-overlay {

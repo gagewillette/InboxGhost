@@ -34,7 +34,9 @@ async function upsertThreadMessages(
       );
     }
   }
+}
 
+async function markSynced(supabase: SupabaseClient, userId: string): Promise<void> {
   await supabase
     .from("gmail_tokens")
     .update({ last_synced_at: new Date().toISOString() })
@@ -43,7 +45,6 @@ async function upsertThreadMessages(
 
 /**
  * Syncs one day's inbox threads for a user. daysBack=0 → today, 1 → yesterday.
- * Called by the `fetch-new-emails` function on user-initiated syncs.
  */
 export async function syncUser(
   supabase: SupabaseClient,
@@ -53,6 +54,27 @@ export async function syncUser(
   const accessToken = await getValidAccessToken(supabase, tokenRow);
   const { threads = [] } = await listThreadsForDay(accessToken, daysBack);
   await upsertThreadMessages(supabase, tokenRow.user_id, accessToken, threads);
+  await markSynced(supabase, tokenRow.user_id);
+}
+
+/**
+ * Syncs inbox threads for a contiguous range of days. fromDay through toDay
+ * inclusive (both relative to today: 0=today, 1=yesterday, etc.). Fetches each
+ * day independently so Gmail's per-day query windows stay accurate, but only
+ * refreshes the token and updates last_synced_at once for the whole range.
+ */
+export async function syncUserDayRange(
+  supabase: SupabaseClient,
+  tokenRow: GmailTokenRow,
+  fromDay: number,
+  toDay: number
+): Promise<void> {
+  const accessToken = await getValidAccessToken(supabase, tokenRow);
+  for (let day = fromDay; day <= toDay; day++) {
+    const { threads = [] } = await listThreadsForDay(accessToken, day);
+    await upsertThreadMessages(supabase, tokenRow.user_id, accessToken, threads);
+  }
+  await markSynced(supabase, tokenRow.user_id);
 }
 
 /**
@@ -67,6 +89,7 @@ export async function syncUserSince(
   const accessToken = await getValidAccessToken(supabase, tokenRow);
   const { threads = [] } = await listThreadsSince(accessToken, sinceEpochSeconds);
   await upsertThreadMessages(supabase, tokenRow.user_id, accessToken, threads);
+  await markSynced(supabase, tokenRow.user_id);
 }
 
 export { TokenRevokedError };

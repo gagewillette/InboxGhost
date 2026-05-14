@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ChevronDown } from "lucide-react";
 import { useEmails } from "../contexts/email_context";
 import { supabase } from "@/app/supabase";
@@ -13,15 +13,50 @@ import GmailConnect from "./GmailConnect";
 import EmailDrawer from "./EmailDrawer";
 import type { ImportanceFilter, EmailThread } from "@/app/types";
 
+const DAYS_INPUT_KEY = "ig_days_back_input";
+const FETCHED_KEY = (userId: string) => `ig_fetched_days_back_${userId}`;
+
+function readInt(key: string, fallback = 0): number {
+  try {
+    const val = localStorage.getItem(key);
+    const n = val !== null ? parseInt(val, 10) : fallback;
+    return isNaN(n) || n < 0 ? fallback : n;
+  } catch { return fallback; }
+}
+
+function writeInt(key: string, n: number) {
+  try { localStorage.setItem(key, String(n)); } catch {}
+}
+
+export function resetFetchedDaysBack(userId: string) {
+  try { localStorage.removeItem(FETCHED_KEY(userId)); } catch {}
+}
+
 export default function EmailViewer() {
   const { threads, loading, refresh, session } = useEmails();
   const [filter, setFilter] = useState<ImportanceFilter>("all");
-  const [daysBack, setDaysBack] = useState(0);
+  const [daysBack, setDaysBackState] = useState(0);
+  const [fetchedDaysBack, setFetchedDaysBackState] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [selectedThread, setSelectedThread] = useState<EmailThread | null>(null);
   const userId = session?.user?.id ?? null;
   const gmailStatus = useGmailStatus(userId);
+
+  useEffect(() => {
+    setDaysBackState(readInt(DAYS_INPUT_KEY));
+    if (userId) setFetchedDaysBackState(readInt(FETCHED_KEY(userId)));
+  }, [userId]);
+
+  const setDaysBack = (n: number) => {
+    setDaysBackState(n);
+    writeInt(DAYS_INPUT_KEY, n);
+  };
+
+  const setFetchedDaysBack = (n: number) => {
+    setFetchedDaysBackState(n);
+    if (userId) writeInt(FETCHED_KEY(userId), n);
+  };
 
   const getToken = async () => {
     const { data: { session: s } } = await supabase.auth.getSession();
@@ -45,11 +80,18 @@ export default function EmailViewer() {
   const handleLoadMore = async () => {
     const token = await getToken();
     if (!token) return;
-    const nextDay = daysBack + 1;
+
+    if (daysBack <= fetchedDaysBack) {
+      // All requested days are already in the DB — just refresh the display.
+      await refresh();
+      return;
+    }
+
     setLoadingMore(true);
     try {
-      await triggerEmailSync(token, nextDay);
-      setDaysBack(nextDay);
+      // Only fetch the days we don't have yet.
+      await triggerEmailSync(token, fetchedDaysBack + 1, daysBack);
+      setFetchedDaysBack(daysBack);
       await refresh();
     } catch (err) {
       console.error("Load more failed:", err);
@@ -101,13 +143,21 @@ export default function EmailViewer() {
           <span className="ig-load-more-label">
             Showing up to {daysBack + 1} day{daysBack + 1 !== 1 ? "s" : ""} back
           </span>
+          <input
+            type="number"
+            min={0}
+            value={daysBack}
+            onChange={(e) => setDaysBack(Math.max(0, parseInt(e.target.value, 10) || 0))}
+            className="ig-days-input"
+            aria-label="Days back"
+          />
           <button
             onClick={handleLoadMore}
             disabled={loadingMore}
             className="ig-load-more-btn"
           >
             <ChevronDown size={14} strokeWidth={1.5} className={loadingMore ? "ig-spin" : ""} />
-            {loadingMore ? "Fetching…" : "Load previous day"}
+            {loadingMore ? "Fetching…" : "Load"}
           </button>
         </div>
       )}

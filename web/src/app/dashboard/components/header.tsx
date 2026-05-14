@@ -7,10 +7,11 @@ import Link from "next/link";
 import { supabase } from "@/app/supabase";
 import { useEmails } from "../contexts/email_context";
 import { triggerEmailSync, deleteAllEmails } from "../lib/emails";
+import { resetFetchedDaysBack } from "./email_viewer";
 import { GhostWordmark } from "@/components/landing/GhostLogo";
 
 export default function Header() {
-  const { refresh, clearCache } = useEmails();
+  const { refresh, clearCache, session } = useEmails();
   const router = useRouter();
   const [syncing, setSyncing] = useState(false);
   const [nuking, setNuking] = useState(false);
@@ -40,6 +41,7 @@ export default function Header() {
     setNuking(true);
     try {
       await deleteAllEmails(token);
+      if (session?.user?.id) resetFetchedDaysBack(session.user.id);
       await refresh();
     } catch (err) {
       console.error("Nuke failed:", err);
