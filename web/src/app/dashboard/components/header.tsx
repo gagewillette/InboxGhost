@@ -1,8 +1,9 @@
 "use client";
 
-import { Wifi, Trash2, LogOut, Eraser } from "lucide-react";
+import { Wifi, Trash2, LogOut, Eraser, Settings } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { supabase } from "@/app/supabase";
 import { useEmails } from "../contexts/email_context";
 import { triggerEmailSync, deleteAllEmails } from "../lib/emails";
@@ -77,6 +78,11 @@ export default function Header() {
             icon={<Eraser size={15} strokeWidth={1.5} />}
             label="Clear cache"
           />
+          <Link href="/dashboard/settings" className="ig-header-btn" aria-label="Settings">
+            <Settings size={15} strokeWidth={1.5} />
+            <span>Settings</span>
+          </Link>
+          <div className="ig-divider-v" />
           <HeaderButton
             onClick={handleSignOut}
             icon={<LogOut size={15} strokeWidth={1.5} />}

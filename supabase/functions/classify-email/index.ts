@@ -23,10 +23,7 @@ Respond with JSON only, no other text:
 }`;
 
 
-interface UserLabel {
-  name: string;
-  description?: string;
-}
+type UserLabel = string | { name: string; description?: string };
 
 interface ClassifyRequest {
   thread_id: string;
@@ -80,7 +77,11 @@ Deno.serve(async (req) => {
 
     const labelBlock = user_labels.length > 0
       ? user_labels
-          .map((l) => (l.description ? `- ${l.name}: ${l.description}` : `- ${l.name}`))
+          .map((l) => {
+            const name = typeof l === "string" ? l : l.name;
+            const desc = typeof l === "string" ? undefined : l.description;
+            return desc ? `- ${name}: ${desc}` : `- ${name}`;
+          })
           .join("\n")
       : "(none — skip label assignment, only return importance)";
 
