@@ -409,3 +409,6 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 
 [functions.classify-email]
 verify_jwt = false
+
+[functions.refresh-gmail-token]
+verify_jwt = false

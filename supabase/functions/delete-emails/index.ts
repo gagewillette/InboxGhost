@@ -1,39 +1,20 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
-};
+import { json, corsOk } from "../_shared/cors.ts";
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("OK", { status: 200, headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return corsOk();
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader) {
-    return new Response(JSON.stringify({ error: "Missing auth token" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
-    });
-  }
+  const token = req.headers.get("Authorization")?.replace("Bearer ", "");
+  if (!token) return json({ error: "Missing auth token" }, 401);
 
-  const token = authHeader.replace("Bearer ", "");
   const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-
-  if (userError || !user) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
-    });
-  }
+  if (userError || !user) return json({ error: "Unauthorized" }, 401);
 
   const { error: emailErr } = await supabase
     .from("emails")
@@ -46,17 +27,8 @@ Deno.serve(async (req) => {
     .eq("user_id", user.id);
 
   if (emailErr || threadErr) {
-    return new Response(
-      JSON.stringify({ error: emailErr?.message || threadErr?.message }),
-      {
-        status: 500,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      }
-    );
+    return json({ error: emailErr?.message ?? threadErr?.message }, 500);
   }
 
-  return new Response(
-    JSON.stringify({ message: "Emails and threads deleted successfully." }),
-    { headers: { "Content-Type": "application/json", ...corsHeaders } }
-  );
+  return json({ message: "Emails and threads deleted successfully." }, 200);
 });

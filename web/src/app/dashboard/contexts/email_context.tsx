@@ -11,7 +11,8 @@ import {
 import { Session } from '@supabase/supabase-js'
 import { supabase } from '../../supabase'
 import type { Email, EmailThread } from '../../types'
-import { fetchEmails, fetchEmailThreads, triggerEmailSync } from '../lib/emails'
+import { fetchEmails, fetchEmailThreads, triggerEmailSync, refreshGmailToken } from '../lib/emails'
+import { buildGmailAuthUrl } from '../lib/gmail'
 
 const CACHE_TTL_MS = 10 * 60 * 1000
 
@@ -59,8 +60,15 @@ export const EmailProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null))
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
       setSession(s)
+      if (event === 'SIGNED_IN' && s?.access_token && s.user) {
+        refreshGmailToken(s.access_token).then((result) => {
+          if (result?.reason === 'needs_reauth') {
+            window.location.href = buildGmailAuthUrl(s.user!.id)
+          }
+        }).catch(console.error)
+      }
     })
 
     return () => subscription.unsubscribe()

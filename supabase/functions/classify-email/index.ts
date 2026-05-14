@@ -1,11 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-
-const CORS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
-
+import { json, corsOk } from "../_shared/cors.ts";
 
 const systemPrompt = `You are an email classifier. You will receive a list of available labels and an email (from, subject, and optional body).
 
@@ -21,7 +16,6 @@ Respond with JSON only, no other text:
   "labels": ["label-name"],
   "importance": "high" | "med" | "low"
 }`;
-
 
 type UserLabel = string | { name: string; description?: string };
 
@@ -39,26 +33,19 @@ interface ClassifyResult {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: CORS });
-  }
+  if (req.method === "OPTIONS") return corsOk();
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return json({ error: "Missing authorization header" }, 401);
-    }
+    const token = req.headers.get("Authorization")?.replace("Bearer ", "");
+    if (!token) return json({ error: "Missing authorization header" }, 401);
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!
     );
 
-    const token = authHeader.replace("Bearer ", "");
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !user) {
-      return json({ error: "Unauthorized" }, 401);
-    }
+    if (authError || !user) return json({ error: "Unauthorized" }, 401);
 
     const { thread_id, subject, body, from_email, user_labels }: ClassifyRequest =
       await req.json();
@@ -71,7 +58,7 @@ Deno.serve(async (req) => {
     const model = Deno.env.get("OPENROUTER_MODEL");
 
     if (!apiKey || !model) {
-      console.error("Missing classification env vars: OPENROUTER_API_KEY or OPENROUTER_MODEL");
+      console.error("Missing env vars: OPENROUTER_API_KEY or OPENROUTER_MODEL");
       return json({ error: "Classification service not configured" }, 500);
     }
 
@@ -113,8 +100,7 @@ Deno.serve(async (req) => {
     });
 
     if (!orRes.ok) {
-      const errText = await orRes.text();
-      console.error("OpenRouter error:", errText);
+      console.error("OpenRouter error:", await orRes.text());
       return json({ error: "Classification request failed" }, 502);
     }
 
@@ -134,10 +120,9 @@ Deno.serve(async (req) => {
       result = { labels: [], importance: "low" };
     }
 
-    // Use service role to bypass RLS for the upsert
     const serviceClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
     const { error: upsertError } = await serviceClient
@@ -150,7 +135,7 @@ Deno.serve(async (req) => {
           importance: result.importance,
           classified_at: new Date().toISOString(),
         },
-        { onConflict: "user_id,thread_id" },
+        { onConflict: "user_id,thread_id" }
       );
 
     if (upsertError) {
@@ -163,10 +148,3 @@ Deno.serve(async (req) => {
     return json({ error: "Internal server error" }, 500);
   }
 });
-
-function json(data: unknown, status: number): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { ...CORS, "Content-Type": "application/json" },
-  });
-}
