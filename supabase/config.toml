@@ -412,3 +412,6 @@ verify_jwt = false
 
 [functions.refresh-gmail-token]
 verify_jwt = false
+
+[functions.fetch-attachment]
+verify_jwt = false

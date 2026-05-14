@@ -76,6 +76,31 @@ export async function refreshGmailToken(accessToken: string) {
   return res.json();
 }
 
+export async function fetchAttachment(
+  accessToken: string,
+  messageId: string,
+  attachmentId: string,
+  filename: string,
+  mimeType: string
+): Promise<{ url: string; path: string }> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const res = await fetch(`${supabaseUrl}/functions/v1/fetch-attachment`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ message_id: messageId, attachment_id: attachmentId, filename, mime_type: mimeType }),
+  });
+
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(`Failed to fetch attachment: ${error}`);
+  }
+
+  return res.json();
+}
+
 export async function deleteAllEmails(accessToken: string) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const res = await fetch(`${supabaseUrl}/functions/v1/delete-emails`, {

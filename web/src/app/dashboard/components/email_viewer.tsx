@@ -28,12 +28,8 @@ function writeInt(key: string, n: number) {
   try { localStorage.setItem(key, String(n)); } catch {}
 }
 
-export function resetFetchedDaysBack(userId: string) {
-  try { localStorage.removeItem(FETCHED_KEY(userId)); } catch {}
-}
-
 export default function EmailViewer() {
-  const { threads, loading, refresh, session } = useEmails();
+  const { threads, loading, refresh, session, syncResetCount } = useEmails();
   const [filter, setFilter] = useState<ImportanceFilter>("all");
   const [daysBack, setDaysBackState] = useState(0);
   const [fetchedDaysBack, setFetchedDaysBackState] = useState(0);
@@ -43,10 +39,22 @@ export default function EmailViewer() {
   const userId = session?.user?.id ?? null;
   const gmailStatus = useGmailStatus(userId);
 
+  // Restore persisted days state on mount / user change.
   useEffect(() => {
     setDaysBackState(readInt(DAYS_INPUT_KEY));
     if (userId) setFetchedDaysBackState(readInt(FETCHED_KEY(userId)));
   }, [userId]);
+
+  // Reset days state when the DB is nuked.
+  useEffect(() => {
+    if (syncResetCount === 0) return;
+    setDaysBackState(0);
+    setFetchedDaysBackState(0);
+    try {
+      localStorage.removeItem(DAYS_INPUT_KEY);
+      if (userId) localStorage.removeItem(FETCHED_KEY(userId));
+    } catch {}
+  }, [syncResetCount, userId]);
 
   const setDaysBack = (n: number) => {
     setDaysBackState(n);

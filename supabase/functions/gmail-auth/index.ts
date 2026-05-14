@@ -1,3 +1,34 @@
+/**
+ * gmail-auth — OAuth2 authorization code callback handler
+ *
+ * This is the redirect URI registered with Google Cloud Console. After the
+ * user grants Gmail access in the Google consent screen, Google redirects them
+ * here with a one-time `code` and the `state` value that was passed when
+ * building the authorization URL.
+ *
+ * Flow:
+ *   1. Extract `code` (Google's one-time auth code) and `state` (user_id) from
+ *      the query string.
+ *   2. Exchange the code for tokens via Google's token endpoint.
+ *   3. Upsert the access token, refresh token, and expiry into `gmail_tokens`.
+ *   4. Redirect the user back to the app's success page.
+ *
+ * State parameter:
+ *   InboxGhost passes the Supabase `user.id` as `state` when building the
+ *   authorization URL. This is how we know which user to associate the tokens
+ *   with after the redirect — there is no session on this edge function request.
+ *
+ * Environment variables required:
+ *   GOOGLE_CLIENT_ID      Google OAuth2 app client ID
+ *   GOOGLE_CLIENT_SECRET  Google OAuth2 app client secret
+ *   REDIRECT_URI          Must match exactly what is registered in Google Cloud Console
+ *   APP_URL               Base URL of the Next.js app (for the post-auth redirect)
+ *   SUPABASE_URL          Supabase project URL
+ *   SUPABASE_SERVICE_ROLE_KEY  Service role key (bypasses RLS for the token upsert)
+ *
+ * Success: HTTP 302 redirect to `{APP_URL}/success`
+ * Failure: HTTP 400 or 500 with a plain-text error message
+ */
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
@@ -35,6 +66,8 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
+  // Upsert so that re-connecting Gmail (e.g. after token revocation) replaces
+  // the existing row rather than failing on the primary key constraint.
   const { error } = await supabase.from("gmail_tokens").upsert({
     user_id: state,
     access_token,

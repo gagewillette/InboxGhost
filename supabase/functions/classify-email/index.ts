@@ -1,3 +1,65 @@
+/**
+ * classify-email — AI-powered email label and importance scoring
+ *
+ * Accepts a thread's subject, body, and sender along with the user's custom
+ * label set, calls an LLM via OpenRouter, and persists the result to
+ * `email_classifications`. Returns the classification immediately so the UI can
+ * update without waiting for a separate read.
+ *
+ * Classification output:
+ *   labels      string[]             Zero or more of the user's label names that
+ *                                    apply to this email. The model is instructed
+ *                                    to only return labels from the provided list
+ *                                    and to leave it empty if none match.
+ *   importance  "high" | "med" | "low"  How urgently the user should read this.
+ *
+ * Importance rubric (from system prompt):
+ *   high — requires action soon, time-sensitive, or from someone important
+ *   med  — worth reading but not urgent
+ *   low  — automated, promotional, or low-signal
+ *
+ * Label format accepted in `user_labels`:
+ *   string                     — just a name, no description
+ *   { name, description? }     — with optional description for better accuracy
+ *
+ * When `user_labels` is empty, label assignment is skipped and only importance
+ * is scored.
+ *
+ * Model configuration:
+ *   Provider and model are set via environment variables so they can be swapped
+ *   without a code change:
+ *     OPENROUTER_API_KEY   API key for OpenRouter
+ *     OPENROUTER_MODEL     Model identifier (e.g. "openai/gpt-4o-mini")
+ *
+ *   `response_format: { type: "json_object" }` is used to guarantee the model
+ *   returns valid JSON. The result is validated and sanitized before persistence
+ *   to handle edge cases where the model returns unexpected fields.
+ *
+ * Persistence:
+ *   Results are upserted to `email_classifications` on `(user_id, thread_id)`.
+ *   A upsert failure is logged but does not fail the request — the classification
+ *   is still returned to the caller.
+ *
+ * Auth: caller must supply a valid Supabase JWT (anon key client is used for
+ * auth verification; service role client is used for the classification upsert
+ * to bypass RLS).
+ *
+ * Request body (JSON):
+ *   thread_id    string          Required. Identifies the thread to classify.
+ *   subject      string          Required. Email subject line.
+ *   body         string?         Optional. Email body (plain text preferred).
+ *   from_email   string?         Optional. Sender email address for context.
+ *   user_labels  UserLabel[]     Required. Array of label names or objects.
+ *
+ * Response (200):
+ *   { labels: string[], importance: "high" | "med" | "low" }
+ *
+ * Error responses:
+ *   400  Missing required fields (thread_id or subject)
+ *   401  Missing or invalid auth token
+ *   500  OpenRouter not configured
+ *   502  OpenRouter returned a non-200 response
+ */
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { json, corsOk } from "../_shared/cors.ts";
@@ -39,6 +101,7 @@ Deno.serve(async (req) => {
     const token = req.headers.get("Authorization")?.replace("Bearer ", "");
     if (!token) return json({ error: "Missing authorization header" }, 401);
 
+    // Use the anon key client for auth verification (respects JWT claims).
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!
@@ -62,6 +125,8 @@ Deno.serve(async (req) => {
       return json({ error: "Classification service not configured" }, 500);
     }
 
+    // Build the label block for the user message. When no labels are configured,
+    // the model is told to skip label assignment entirely.
     const labelBlock = user_labels.length > 0
       ? user_labels
           .map((l) => {
@@ -107,6 +172,8 @@ Deno.serve(async (req) => {
     const completion = await orRes.json();
     const raw = completion.choices?.[0]?.message?.content ?? "{}";
 
+    // Validate and sanitize the model's output. Invalid importance values
+    // default to "low" rather than failing the request.
     let result: ClassifyResult;
     try {
       const parsed = JSON.parse(raw);
@@ -120,6 +187,7 @@ Deno.serve(async (req) => {
       result = { labels: [], importance: "low" };
     }
 
+    // Use service role for the upsert to bypass RLS on email_classifications.
     const serviceClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -139,6 +207,7 @@ Deno.serve(async (req) => {
       );
 
     if (upsertError) {
+      // Log but don't fail — the classification is still returned to the caller.
       console.error("Failed to persist classification:", upsertError.message);
     }
 

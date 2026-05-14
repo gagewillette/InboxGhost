@@ -2,17 +2,40 @@
  * sync-all-users — background cron edge function
  *
  * Iterates every row in `gmail_tokens` and syncs each user's inbox forward
- * from their last_synced_at timestamp. Invoked on a schedule via the service-
- * role key — not callable by end users.
+ * from their `last_synced_at` timestamp. Invoked on a schedule via the Supabase
+ * cron system using the service-role key — this function is not reachable or
+ * callable by end users.
  *
- * Per-user errors are caught individually so one bad token doesn't abort the
- * run. Lookback is capped at 24 hours to bound Gmail API quota usage.
+ * Sync window:
+ *   Each user's sync starts from `max(last_synced_at, now - 24h)`. The 24-hour
+ *   cap prevents unbounded Gmail API quota usage for users whose accounts have
+ *   been idle for a long time (e.g. after a deploy gap). New users who have
+ *   never been synced also use the 24-hour lookback.
+ *
+ * Error isolation:
+ *   Each user is synced inside an individual try/catch. A bad token or transient
+ *   Gmail error for one user does not abort the run — the error is logged and
+ *   recorded in the result, and processing continues for all remaining users.
+ *
+ * Token revocation handling:
+ *   If a user's refresh token has been permanently revoked (`TokenRevokedError`),
+ *   `syncUserSince` deletes the token row from the DB as a side-effect. The
+ *   status for that user is recorded as "revoked" so it's visible in cron logs.
+ *   On their next login the UI will prompt them to re-connect Gmail.
+ *
+ * Response (200):
+ *   { synced: Array<{ user_id, status, since_seconds? }> }
+ *   status values: "ok" | "revoked" | "error"
+ *
+ * Error responses:
+ *   500  Failed to fetch the `gmail_tokens` table (DB connection issue)
  */
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { syncUserSince, TokenRevokedError } from "../_shared/syncUser.ts";
 import type { GmailTokenRow } from "../_shared/types.ts";
 
+/** Maximum number of seconds to look back regardless of `last_synced_at`. */
 const MAX_LOOKBACK_SECONDS = 24 * 60 * 60;
 
 Deno.serve(async () => {
@@ -39,6 +62,7 @@ Deno.serve(async () => {
       ? Math.floor(new Date(row.last_synced_at).getTime() / 1000)
       : null;
 
+    // Use last_synced_at if available, but cap at 24 hours in the past.
     const sinceSeconds = lastSyncedSeconds
       ? Math.max(lastSyncedSeconds, nowSeconds - MAX_LOOKBACK_SECONDS)
       : nowSeconds - MAX_LOOKBACK_SECONDS;

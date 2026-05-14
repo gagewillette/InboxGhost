@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { X, Flame, Minus, ChevronDown, Sparkles, Reply } from "lucide-react";
+import { X, Flame, Minus, ChevronDown, Sparkles, Reply, Paperclip, Download, Loader2 } from "lucide-react";
 import { useEmails } from "../contexts/email_context";
 import HtmlEmailFrame from "./HtmlEmailFrame";
-import type { EmailThread } from "@/app/types";
+import { supabase } from "@/app/supabase";
+import { fetchAttachment } from "../lib/emails";
+import type { EmailThread, EmailAttachment } from "@/app/types";
 
 interface Props {
   thread: EmailThread | null;
@@ -18,6 +20,74 @@ function EmailBody({ body, snippet }: { body: string; snippet: string }) {
   if (!content) return <span style={{ color: "var(--ig-fg-muted)" }}>(no content)</span>;
   if (HTML_TAG_RE.test(content)) return <HtmlEmailFrame html={content} />;
   return <>{content}</>;
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function AttachmentsPanel({ thread, messageId }: { thread: EmailThread; messageId: string | undefined }) {
+  const attachments = thread.attachments ?? [];
+  const [fetching, setFetching] = useState<Record<string, boolean>>({});
+  const [done, setDone] = useState<Record<string, boolean>>({});
+
+  if (attachments.length === 0) return null;
+
+  const doFetch = async (att: EmailAttachment) => {
+    if (!messageId || fetching[att.attachment_id] || done[att.attachment_id]) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) return;
+
+    setFetching((f) => ({ ...f, [att.attachment_id]: true }));
+    try {
+      const { url } = await fetchAttachment(token, messageId, att.attachment_id, att.filename, att.mime_type);
+      setDone((d) => ({ ...d, [att.attachment_id]: true }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = att.filename;
+      a.click();
+    } catch (err) {
+      console.error("Attachment fetch failed:", err);
+    } finally {
+      setFetching((f) => ({ ...f, [att.attachment_id]: false }));
+    }
+  };
+
+  const doFetchAll = () => attachments.forEach((att) => doFetch(att));
+
+  return (
+    <div className="ig-attachments">
+      <div className="ig-attachments-header">
+        <Paperclip size={13} strokeWidth={1.5} />
+        <span>{attachments.length} attachment{attachments.length !== 1 ? "s" : ""}</span>
+        <button className="ig-attachments-fetch-all" onClick={doFetchAll}>
+          Fetch all
+        </button>
+      </div>
+      <ul className="ig-attachments-list">
+        {attachments.map((att) => (
+          <li key={att.attachment_id} className="ig-attachment-item">
+            <span className="ig-attachment-name">{att.filename}</span>
+            <span className="ig-attachment-size">{formatBytes(att.size)}</span>
+            <button
+              className="ig-attachment-fetch"
+              onClick={() => doFetch(att)}
+              disabled={fetching[att.attachment_id] || done[att.attachment_id]}
+              aria-label={`Fetch ${att.filename}`}
+            >
+              {fetching[att.attachment_id]
+                ? <Loader2 size={12} strokeWidth={1.5} className="ig-spin" />
+                : <Download size={12} strokeWidth={1.5} />}
+              {done[att.attachment_id] ? "Saved" : "Fetch"}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 function formatFullDate(iso: string) {
@@ -109,6 +179,9 @@ export default function EmailDrawer({ thread, onClose }: Props) {
         <div className="ig-drawer-body">
           {!latest ? "(no messages)" : <EmailBody body={latest.body} snippet={latest.snippet} />}
         </div>
+
+        {/* Attachments */}
+        {thread && <AttachmentsPanel thread={thread} messageId={latest?.message_id} />}
 
         {/* Footer */}
         <div className="ig-drawer-footer">

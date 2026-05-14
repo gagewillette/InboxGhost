@@ -46,6 +46,8 @@ export interface EmailContextType {
   session: Session | null
   refresh: () => Promise<void>
   clearCache: () => void
+  syncResetCount: number
+  bumpSyncReset: () => void
 }
 
 const EmailContext = createContext<EmailContextType | undefined>(undefined)
@@ -56,6 +58,7 @@ export const EmailProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [threads, setThreads] = useState<EmailThread[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [syncResetCount, setSyncResetCount] = useState(0)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null))
@@ -154,9 +157,11 @@ export const EmailProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (session?.user) dropCache(session.user.id)
   }, [session])
 
+  const bumpSyncReset = useCallback(() => setSyncResetCount((n) => n + 1), [])
+
   const contextValue = useMemo(
-    () => ({ emails, threads, loading, error, session, refresh, clearCache }),
-    [emails, threads, loading, error, session, refresh, clearCache]
+    () => ({ emails, threads, loading, error, session, refresh, clearCache, syncResetCount, bumpSyncReset }),
+    [emails, threads, loading, error, session, refresh, clearCache, syncResetCount, bumpSyncReset]
   )
 
   return (
