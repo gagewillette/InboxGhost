@@ -47,7 +47,11 @@ export async function triggerEmailSync(accessToken: string, fromDay = 0, toDay =
       'Content-Type': 'application/json',
       Authorization: `Bearer ${accessToken}`,
     },
-    body: JSON.stringify({ from_day: fromDay, to_day: toDay }),
+    body: JSON.stringify({
+      from_day: fromDay,
+      to_day: toDay,
+      local_date: new Date().toLocaleDateString('en-CA'), // YYYY-MM-DD in user's local TZ
+    }),
   });
 
   if (!res.ok) {
@@ -98,6 +102,32 @@ export async function fetchAttachment(
     throw new Error(`Failed to fetch attachment: ${error}`);
   }
 
+  return res.json();
+}
+
+export async function classifyEmail(
+  accessToken: string,
+  payload: {
+    thread_id: string;
+    subject: string;
+    body?: string;
+    from_email?: string;
+    user_labels: Array<{ name: string; description?: string }>;
+  }
+): Promise<{ importance: "high" | "med" | "low"; labels: string[] }> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const res = await fetch(`${supabaseUrl}/functions/v1/classify-email`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(`Classification failed: ${error}`);
+  }
   return res.json();
 }
 

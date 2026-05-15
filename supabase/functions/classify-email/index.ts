@@ -63,6 +63,47 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { json, corsOk } from "../_shared/cors.ts";
+import { createLogger } from "../_shared/logger.ts";
+
+const log = createLogger("classify", "VERBOSE_CLASSIFY");
+
+const BODY_MAX_CHARS = 3000;
+
+/**
+ * Converts an HTML email body to clean plain text suitable for an LLM.
+ * Removes style/script blocks, preserves paragraph breaks, strips tags,
+ * decodes common entities, and collapses whitespace.
+ */
+function htmlToText(html: string): string {
+  return html
+    // Drop entire style/script/head blocks including their content
+    .replace(/<(style|script|head)[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    // Turn block-level elements into newlines so paragraphs survive
+    .replace(/<\/?(p|div|br|li|tr|h[1-6]|blockquote|pre)[^>]*>/gi, "\n")
+    // Strip every remaining tag
+    .replace(/<[^>]+>/g, " ")
+    // Decode the most common HTML entities
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&[a-z]+;/gi, " ")   // any remaining named entities → space
+    // Collapse runs of whitespace / blank lines
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function prepareBody(raw: string | undefined): string {
+  if (!raw) return "";
+  const isHtml = /<[a-z][\s\S]*>/i.test(raw);
+  const text = isHtml ? htmlToText(raw) : raw.trim();
+  return text.length > BODY_MAX_CHARS
+    ? text.slice(0, BODY_MAX_CHARS) + "\n[truncated]"
+    : text;
+}
 
 const systemPrompt = `You are an email classifier. You will receive a list of available labels and an email (from, subject, and optional body).
 
@@ -110,8 +151,12 @@ Deno.serve(async (req) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) return json({ error: "Unauthorized" }, 401);
 
+    log.info("authenticated user", user.id);
+
     const { thread_id, subject, body, from_email, user_labels }: ClassifyRequest =
       await req.json();
+
+    log.info("request received", { thread_id, subject, from_email, label_count: user_labels?.length ?? 0, body_length: body?.length ?? 0, body_is_html: body ? /<[a-z][\s\S]*>/i.test(body) : false });
 
     if (!thread_id || !subject) {
       return json({ error: "thread_id and subject are required" }, 400);
@@ -121,9 +166,11 @@ Deno.serve(async (req) => {
     const model = Deno.env.get("OPENROUTER_MODEL");
 
     if (!apiKey || !model) {
-      console.error("Missing env vars: OPENROUTER_API_KEY or OPENROUTER_MODEL");
+      log.error("missing env vars: OPENROUTER_API_KEY or OPENROUTER_MODEL");
       return json({ error: "Classification service not configured" }, 500);
     }
+
+    log.info("using model", model);
 
     // Build the label block for the user message. When no labels are configured,
     // the model is told to skip label assignment entirely.
@@ -137,14 +184,21 @@ Deno.serve(async (req) => {
           .join("\n")
       : "(none — skip label assignment, only return importance)";
 
+    const cleanBody = prepareBody(body);
+    log.info("body after cleaning", { original_length: body?.length ?? 0, cleaned_length: cleanBody.length });
+    log.info("cleaned body preview", cleanBody.slice(0, 300));
+
     const userMessage = [
       `Available labels:\n${labelBlock}`,
       `From: ${from_email ?? "unknown"}`,
       `Subject: ${subject}`,
-      body ? `\n${body}` : "",
+      cleanBody ? `\nBody:\n${cleanBody}` : "",
     ]
       .filter(Boolean)
       .join("\n");
+
+    log.info("sending request to OpenRouter");
+    log.json("user message", userMessage);
 
     const orRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -156,7 +210,6 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         model,
-        response_format: { type: "json_object" },
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userMessage },
@@ -164,13 +217,34 @@ Deno.serve(async (req) => {
       }),
     });
 
+    log.info("OpenRouter response status", orRes.status);
+
     if (!orRes.ok) {
-      console.error("OpenRouter error:", await orRes.text());
+      const errBody = await orRes.text();
+      log.error("OpenRouter error response", errBody);
       return json({ error: "Classification request failed" }, 502);
     }
 
     const completion = await orRes.json();
-    const raw = completion.choices?.[0]?.message?.content ?? "{}";
+    log.json("OpenRouter completion", completion);
+
+    const choice = completion.choices?.[0];
+    const finishReason = choice?.finish_reason;
+
+    if (!choice || finishReason === "tool_calls" || choice.message?.content === null) {
+      log.error("model returned no text content", { finish_reason: finishReason, model });
+      return json({ error: "Model did not return a text response — try a different model" }, 502);
+    }
+
+    const rawContent = choice.message.content ?? "{}";
+    log.info("raw model output", rawContent);
+
+    // Strip markdown code fences that non-OpenAI models commonly wrap JSON in.
+    // e.g. ```json\n{...}\n``` or ```\n{...}\n```
+    const raw = rawContent.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
+    if (raw !== rawContent) {
+      log.info("stripped markdown fences from model output");
+    }
 
     // Validate and sanitize the model's output. Invalid importance values
     // default to "low" rather than failing the request.
@@ -184,14 +258,19 @@ Deno.serve(async (req) => {
           : "low",
       };
     } catch {
+      log.error("failed to parse model output, defaulting to low/empty", raw);
       result = { labels: [], importance: "low" };
     }
+
+    log.json("classification result", result);
 
     // Use service role for the upsert to bypass RLS on email_classifications.
     const serviceClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
+
+    log.info("upserting classification to DB for thread", thread_id);
 
     const { error: upsertError } = await serviceClient
       .from("email_classifications")
@@ -208,12 +287,14 @@ Deno.serve(async (req) => {
 
     if (upsertError) {
       // Log but don't fail — the classification is still returned to the caller.
-      console.error("Failed to persist classification:", upsertError.message);
+      log.error("failed to persist classification:", upsertError.message);
+    } else {
+      log.info("classification persisted successfully");
     }
 
     return json(result, 200);
   } catch (err) {
-    console.error("classify-email error:", err);
+    log.error("unhandled exception:", err);
     return json({ error: "Internal server error" }, 500);
   }
 });

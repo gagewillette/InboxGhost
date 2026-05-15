@@ -1486,6 +1486,82 @@ kbd {
   white-space: nowrap;
 }
 
+/* ---------- Per-row classify button ---------- */
+
+.ig-thread-classify-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid var(--ig-border-soft);
+  background: transparent;
+  color: var(--ig-fg-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 100ms ease, color 100ms ease, border-color 100ms ease;
+  padding: 0;
+}
+
+.ig-thread-classify-btn:hover {
+  background: var(--ig-panel);
+  color: var(--ig-accent);
+  border-color: var(--ig-accent);
+}
+
+.ig-thread-classify-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ---------- Classification result row ---------- */
+
+.ig-thread-classification {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ig-thread-classify-dot {
+  font-size: 10px;
+  color: var(--ig-fg-muted);
+  line-height: 1;
+}
+
+.ig-thread-label-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.4;
+  border: 1px solid var(--ig-border-soft);
+  background: var(--ig-panel);
+  color: var(--ig-fg-muted);
+}
+
+.ig-thread-classify-error {
+  font-size: 11px;
+  color: var(--ig-danger);
+}
+
+/* ---------- Inline classification skeleton ---------- */
+
+.ig-thread-classify-skeleton {
+  height: 16px;
+  width: 52px;
+  border-radius: 8px;
+  background: var(--ig-panel);
+  animation: ig-shimmer 1.4s ease-in-out infinite;
+}
+
+.ig-thread-classify-skeleton--short {
+  width: 36px;
+}
+
 /* ---------- Importance badges ---------- */
 
 .ig-badge {

@@ -11,13 +11,18 @@
  *    user's account timezone on Google's side, not UTC.
  */
 
+import { log } from "./logger.ts";
+
 const GMAIL_API_URL = "https://gmail.googleapis.com/gmail/v1";
 
 /** Generic authenticated GET against the Gmail API. Throws on non-2xx. */
 async function gmailRequest<T>(accessToken: string, path: string): Promise<T> {
-  const res = await fetch(`${GMAIL_API_URL}${path}`, {
+  const url = `${GMAIL_API_URL}${path}`;
+  log("GET", url);
+  const res = await fetch(url, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
+  log("response status", res.status, res.statusText);
   if (!res.ok) {
     throw new Error(`Gmail API error: ${res.status} ${res.statusText}`);
   }
@@ -43,20 +48,25 @@ function toGmailDate(d: Date): string {
  * call; pagination is not implemented because InboxGhost targets a personal
  * inbox, not a high-volume mailbox.
  */
-export function listThreadsForDay(
+export async function listThreadsForDay(
   accessToken: string,
-  daysBack: number
+  daysBack: number,
+  baseDate: Date = new Date()
 ): Promise<{ threads?: { id: string }[] }> {
-  const after = new Date();
+  const after = new Date(baseDate);
   after.setDate(after.getDate() - daysBack);
-  const before = new Date();
+  const before = new Date(baseDate);
   before.setDate(before.getDate() - daysBack + 1);
 
-  const q = encodeURIComponent(
-    `in:inbox -category:social -category:promotions after:${toGmailDate(after)} before:${toGmailDate(before)}`
-  );
+  const query = `in:inbox -category:social -category:promotions after:${toGmailDate(after)} before:${toGmailDate(before)}`;
+  log(`listThreadsForDay daysBack=${daysBack} query="${query}"`);
 
-  return gmailRequest(accessToken, `/users/me/threads?maxResults=100&q=${q}`);
+  const result = await gmailRequest<{ threads?: { id: string }[] }>(
+    accessToken,
+    `/users/me/threads?maxResults=100&q=${encodeURIComponent(query)}`
+  );
+  log(`listThreadsForDay → ${result.threads?.length ?? 0} thread(s)`);
+  return result;
 }
 
 /**
@@ -64,15 +74,19 @@ export function listThreadsForDay(
  * Used by the background cron (`sync-all-users`) which tracks an absolute
  * cursor rather than a day-relative offset.
  */
-export function listThreadsSince(
+export async function listThreadsSince(
   accessToken: string,
   sinceEpochSeconds: number
 ): Promise<{ threads?: { id: string }[] }> {
-  const q = encodeURIComponent(
-    `in:inbox -category:social -category:promotions after:${sinceEpochSeconds}`
-  );
+  const query = `in:inbox -category:social -category:promotions after:${sinceEpochSeconds}`;
+  log(`listThreadsSince sinceEpochSeconds=${sinceEpochSeconds} query="${query}"`);
 
-  return gmailRequest(accessToken, `/users/me/threads?maxResults=100&q=${q}`);
+  const result = await gmailRequest<{ threads?: { id: string }[] }>(
+    accessToken,
+    `/users/me/threads?maxResults=100&q=${encodeURIComponent(query)}`
+  );
+  log(`listThreadsSince → ${result.threads?.length ?? 0} thread(s)`);
+  return result;
 }
 
 /**

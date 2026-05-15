@@ -50,27 +50,33 @@ function findPart(parts: any[], mimeType: string): any {
 /**
  * Extract the readable body from a Gmail message payload.
  *
- * Priority order (highest to lowest):
- *   1. text/plain  — preferred for AI classification and plain display
- *   2. text/html   — used when no plain-text alternative exists; the UI renders
- *                    it in a sandboxed iframe via `HtmlEmailFrame`
- *   3. Any part with inline data — last resort for unusual MIME structures
- *   4. Top-level `payload.body.data` — single-part (non-multipart) messages
+ * Most modern email (especially from automated/marketing senders) is HTML with
+ * a text/plain sibling kept around only as a fallback for ancient clients.
+ * InboxGhost renders HTML properly in a sandboxed iframe, so we always prefer
+ * text/html regardless of which multipart subtype wraps it (alternative,
+ * mixed, related, signed, etc.). text/plain is only used when no HTML part
+ * exists anywhere in the MIME tree.
+ *
+ * Priority order:
+ *   any multipart  → text/html (recursive) → text/plain (recursive) → first inline part
+ *   single-part    → payload.body.data
  */
 // deno-lint-ignore no-explicit-any
-function getBody(payload: any): string {
-  if (!payload) return "";
+function getBodyAndType(payload: any): { body: string; content_type: string } {
+  if (!payload) return { body: "", content_type: "text/plain" };
   if (payload.parts) {
-    // Prefer plain text; fall back to HTML; last resort any part with data.
-    const plain = findPart(payload.parts, "text/plain");
-    if (plain) return decodeBase64(plain.body.data);
     const html = findPart(payload.parts, "text/html");
-    if (html) return decodeBase64(html.body.data);
+    if (html) return { body: decodeBase64(html.body.data), content_type: "text/html" };
+    const plain = findPart(payload.parts, "text/plain");
+    if (plain) return { body: decodeBase64(plain.body.data), content_type: "text/plain" };
+    // deno-lint-ignore no-explicit-any
     const any = payload.parts.find((p: any) => p.body?.data);
-    if (any) return decodeBase64(any.body.data);
+    if (any) return { body: decodeBase64(any.body.data), content_type: any.mimeType ?? "text/plain" };
   }
-  if (payload.body?.data) return decodeBase64(payload.body.data);
-  return "";
+  if (payload.body?.data) {
+    return { body: decodeBase64(payload.body.data), content_type: payload.mimeType ?? "text/plain" };
+  }
+  return { body: "", content_type: payload.mimeType ?? "text/plain" };
 }
 
 /** Build a case-insensitive map of header name → value for fast lookup. */
@@ -129,6 +135,8 @@ export interface ParsedEmail {
   snippet: string;
   /** Decoded body text (plain or HTML depending on what's available). */
   body: string;
+  /** MIME type of the body string — e.g. "text/plain" or "text/html". */
+  content_type: string;
   /** Millisecond epoch timestamp from Gmail's `internalDate` field. */
   internal_date: number;
   is_incoming: boolean;
@@ -182,6 +190,8 @@ export default function parseEmail(userId: string, msg: any): ParsedEmail {
     ? collectAttachments(msg.payload.parts)
     : [];
 
+  const { body, content_type } = getBodyAndType(msg.payload);
+
   return {
     user_id: userId,
     thread_id: msg.threadId,
@@ -191,7 +201,8 @@ export default function parseEmail(userId: string, msg: any): ParsedEmail {
     to_emails: toEmails,
     subject: headers["subject"] || "",
     snippet: msg.snippet || "",
-    body: getBody(msg.payload),
+    body,
+    content_type,
     internal_date: parseInt(msg.internalDate, 10) || Date.now(),
     is_incoming: true,
     is_processed: true,

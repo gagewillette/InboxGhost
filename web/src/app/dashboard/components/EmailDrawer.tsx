@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { X, Flame, Minus, ChevronDown, Sparkles, Reply, Paperclip, Download, Loader2 } from "lucide-react";
 import { useEmails } from "../contexts/email_context";
-import HtmlEmailFrame from "./HtmlEmailFrame";
+import EmailRenderer from "./EmailRenderer";
 import { supabase } from "@/app/supabase";
 import { fetchAttachment } from "../lib/emails";
 import type { EmailThread, EmailAttachment } from "@/app/types";
@@ -13,14 +13,6 @@ interface Props {
   onClose: () => void;
 }
 
-const HTML_TAG_RE = /<[a-z][\s\S]*?>/i;
-
-function EmailBody({ body, snippet }: { body: string; snippet: string }) {
-  const content = body || snippet;
-  if (!content) return <span style={{ color: "var(--ig-fg-muted)" }}>(no content)</span>;
-  if (HTML_TAG_RE.test(content)) return <HtmlEmailFrame html={content} />;
-  return <>{content}</>;
-}
 
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -177,7 +169,13 @@ export default function EmailDrawer({ thread, onClose }: Props) {
 
         {/* Body */}
         <div className="ig-drawer-body">
-          {!latest ? "(no messages)" : <EmailBody body={latest.body} snippet={latest.snippet} />}
+          {!latest ? "(no messages)" : (
+            <EmailRenderer
+              body={latest.body}
+              content_type={latest.content_type ?? "text/plain"}
+              snippet={latest.snippet}
+            />
+          )}
         </div>
 
         {/* Attachments */}

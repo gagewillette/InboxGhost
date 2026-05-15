@@ -39,6 +39,10 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({}));
   const fromDay: number = typeof body.from_day === "number" ? body.from_day : 0;
   const toDay: number = typeof body.to_day === "number" ? body.to_day : fromDay;
+  // Use client's local date so "today" reflects the user's timezone, not server UTC.
+  const baseDate: Date = body.local_date
+    ? new Date(body.local_date + "T00:00:00")
+    : new Date();
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -58,9 +62,9 @@ Deno.serve(async (req) => {
 
   try {
     if (fromDay === 0 && toDay === 0) {
-      await syncUser(supabase, tokenRow as GmailTokenRow, 0);
+      await syncUser(supabase, tokenRow as GmailTokenRow, 0, baseDate);
     } else {
-      await syncUserDayRange(supabase, tokenRow as GmailTokenRow, fromDay, toDay);
+      await syncUserDayRange(supabase, tokenRow as GmailTokenRow, fromDay, toDay, baseDate);
     }
     return json({ success: true, from_day: fromDay, to_day: toDay }, 200);
   } catch (err) {

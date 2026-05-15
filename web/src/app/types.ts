@@ -14,6 +14,7 @@ export interface Email {
   subject: string;
   snippet: string;
   body: string;
+  content_type: string;
   internal_date: number;
   is_incoming: boolean;
   is_processed: boolean;

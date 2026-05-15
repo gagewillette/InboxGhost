@@ -1,11 +1,22 @@
 "use client";
 
-import { Flame, Minus, ChevronDown, Mail } from "lucide-react";
-import type { EmailThread } from "@/app/types";
+import { useState } from "react";
+import { Flame, Minus, ChevronDown, Mail, Sparkles } from "lucide-react";
+import type { EmailThread, UserLabel } from "@/app/types";
+import { classifyEmail } from "../lib/emails";
+
+type ClassificationState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "done"; importance: "high" | "med" | "low"; labels: string[] }
+  | { status: "error" };
 
 type ThreadRowProps = {
   thread: EmailThread;
   onClick: () => void;
+  userLabels: UserLabel[];
+  getToken: () => Promise<string | null>;
+  emailBody?: string;
 };
 
 function formatRelativeTime(iso: string): string {
@@ -36,7 +47,90 @@ function ImportanceBadge({ level }: { level?: "high" | "med" | "low" }) {
   );
 }
 
-export default function ThreadRow({ thread, onClick }: ThreadRowProps) {
+function LabelChip({ label, userLabels }: { label: string; userLabels: UserLabel[] }) {
+  const match = userLabels.find((l) => l.name === label);
+  const color = match?.color;
+  const style = color
+    ? {
+        background: `color-mix(in oklch, ${color} 16%, transparent)`,
+        color,
+        borderColor: `color-mix(in oklch, ${color} 28%, transparent)`,
+      }
+    : undefined;
+  return (
+    <span className="ig-thread-label-chip" style={style}>
+      {label}
+    </span>
+  );
+}
+
+function ClassificationRow({
+  state,
+  userLabels,
+}: {
+  state: ClassificationState;
+  userLabels: UserLabel[];
+}) {
+  if (state.status === "idle") return null;
+
+  if (state.status === "loading") {
+    return (
+      <div className="ig-thread-classification">
+        <div className="ig-thread-classify-skeleton" />
+        <div className="ig-thread-classify-skeleton ig-thread-classify-skeleton--short" />
+      </div>
+    );
+  }
+
+  if (state.status === "error") {
+    return (
+      <div className="ig-thread-classification">
+        <span className="ig-thread-classify-error">Classification failed</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="ig-thread-classification">
+      <ImportanceBadge level={state.importance} />
+      {state.labels.length > 0 && (
+        <>
+          <span className="ig-thread-classify-dot" aria-hidden="true">·</span>
+          {state.labels.map((l) => (
+            <LabelChip key={l} label={l} userLabels={userLabels} />
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+export default function ThreadRow({ thread, onClick, userLabels, getToken, emailBody }: ThreadRowProps) {
+  const [classification, setClassification] = useState<ClassificationState>({ status: "idle" });
+
+  const handleClassify = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (classification.status === "loading") return;
+
+    setClassification({ status: "loading" });
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Not authenticated");
+
+      const result = await classifyEmail(token, {
+        thread_id: thread.thread_id,
+        subject: thread.subject,
+        from_email: thread.sender,
+        body: emailBody,
+        user_labels: userLabels.map((l) => ({ name: l.name, description: l.description })),
+      });
+
+      setClassification({ status: "done", importance: result.importance, labels: result.labels });
+    } catch {
+      setClassification({ status: "error" });
+    }
+  };
+
   return (
     <div
       className="ig-thread-row"
@@ -53,10 +147,22 @@ export default function ThreadRow({ thread, onClick }: ThreadRowProps) {
         <div className="ig-thread-top">
           <span className="ig-thread-subject">{thread.subject || "(no subject)"}</span>
           <div className="ig-thread-meta">
-            <ImportanceBadge level={thread.importance} />
+            {classification.status === "idle" && <ImportanceBadge level={thread.importance} />}
             <span className="ig-thread-time">{formatRelativeTime(thread.last_message_at)}</span>
+            <button
+              className="ig-thread-classify-btn"
+              onClick={handleClassify}
+              disabled={classification.status === "loading"}
+              title="Classify with AI"
+              aria-label="Classify email with AI"
+            >
+              <Sparkles size={12} strokeWidth={1.5} />
+            </button>
           </div>
         </div>
+
+        <ClassificationRow state={classification} userLabels={userLabels} />
+
         <span className="ig-thread-sender">{thread.sender}</span>
       </div>
     </div>

@@ -27,6 +27,7 @@ import { listThreadsForDay, listThreadsSince, getThread, getMessage } from "./gm
 import { getValidAccessToken, TokenRevokedError } from "./gmailAuth.ts";
 import { GmailTokenRow } from "./types.ts";
 import parseEmail from "./parseEmail.ts";
+import { log, logJson } from "./logger.ts";
 
 export type { GmailTokenRow } from "./types.ts";
 
@@ -48,11 +49,17 @@ async function upsertThreadMessages(
   accessToken: string,
   threads: { id: string }[]
 ): Promise<void> {
+  log(`upsertThreadMessages: processing ${threads.length} thread(s) for user ${userId}`);
   for (const thread of threads) {
+    log(`  fetching thread ${thread.id}`);
     const threadData = await getThread(accessToken, thread.id);
+    log(`  thread ${thread.id} has ${threadData.messages?.length ?? 0} message(s)`);
     for (const msg of threadData.messages) {
+      log(`    fetching message ${msg.id}`);
       const fullMsg = await getMessage(accessToken, msg.id);
       const { sender, attachments, ...emailRow } = parseEmail(userId, fullMsg);
+      log(`    parsed: subject="${emailRow.subject}" from="${emailRow.from_email}" date=${new Date(emailRow.internal_date).toISOString()} body_length=${emailRow.body.length} content_type=${emailRow.content_type}`);
+      logJson(`    full email row`, { ...emailRow, body: emailRow.body.slice(0, 200) + (emailRow.body.length > 200 ? "…" : "") });
 
       await supabase
         .from("emails")
@@ -120,12 +127,17 @@ async function markSynced(supabase: SupabaseClient, userId: string): Promise<voi
 export async function syncUser(
   supabase: SupabaseClient,
   tokenRow: GmailTokenRow,
-  daysBack = 0
+  daysBack = 0,
+  baseDate = new Date()
 ): Promise<void> {
+  log(`syncUser: user=${tokenRow.user_id} daysBack=${daysBack}`);
   const accessToken = await getValidAccessToken(supabase, tokenRow);
-  const { threads = [] } = await listThreadsForDay(accessToken, daysBack);
+  log("syncUser: access token obtained");
+  const { threads = [] } = await listThreadsForDay(accessToken, daysBack, baseDate);
+  log(`syncUser: ${threads.length} thread(s) returned`);
   await upsertThreadMessages(supabase, tokenRow.user_id, accessToken, threads);
   await markSynced(supabase, tokenRow.user_id);
+  log("syncUser: done");
 }
 
 /**
@@ -147,14 +159,20 @@ export async function syncUserDayRange(
   supabase: SupabaseClient,
   tokenRow: GmailTokenRow,
   fromDay: number,
-  toDay: number
+  toDay: number,
+  baseDate = new Date()
 ): Promise<void> {
+  log(`syncUserDayRange: user=${tokenRow.user_id} fromDay=${fromDay} toDay=${toDay}`);
   const accessToken = await getValidAccessToken(supabase, tokenRow);
+  log("syncUserDayRange: access token obtained");
   for (let day = fromDay; day <= toDay; day++) {
-    const { threads = [] } = await listThreadsForDay(accessToken, day);
+    log(`syncUserDayRange: fetching day ${day}`);
+    const { threads = [] } = await listThreadsForDay(accessToken, day, baseDate);
+    log(`syncUserDayRange: day ${day} → ${threads.length} thread(s)`);
     await upsertThreadMessages(supabase, tokenRow.user_id, accessToken, threads);
   }
   await markSynced(supabase, tokenRow.user_id);
+  log("syncUserDayRange: done");
 }
 
 /**
@@ -169,10 +187,14 @@ export async function syncUserSince(
   tokenRow: GmailTokenRow,
   sinceEpochSeconds: number
 ): Promise<void> {
+  log(`syncUserSince: user=${tokenRow.user_id} sinceEpochSeconds=${sinceEpochSeconds} (${new Date(sinceEpochSeconds * 1000).toISOString()})`);
   const accessToken = await getValidAccessToken(supabase, tokenRow);
+  log("syncUserSince: access token obtained");
   const { threads = [] } = await listThreadsSince(accessToken, sinceEpochSeconds);
+  log(`syncUserSince: ${threads.length} thread(s) returned`);
   await upsertThreadMessages(supabase, tokenRow.user_id, accessToken, threads);
   await markSynced(supabase, tokenRow.user_id);
+  log("syncUserSince: done");
 }
 
 export { TokenRevokedError };

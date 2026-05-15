@@ -11,7 +11,7 @@ import ThreadRow from "./ThreadRow";
 import EmptyState from "./EmptyState";
 import GmailConnect from "./GmailConnect";
 import EmailDrawer from "./EmailDrawer";
-import type { ImportanceFilter, EmailThread } from "@/app/types";
+import type { ImportanceFilter, EmailThread, UserLabel } from "@/app/types";
 
 const DAYS_INPUT_KEY = "ig_days_back_input";
 const FETCHED_KEY = (userId: string) => `ig_fetched_days_back_${userId}`;
@@ -29,15 +29,25 @@ function writeInt(key: string, n: number) {
 }
 
 export default function EmailViewer() {
-  const { threads, loading, refresh, session, syncResetCount } = useEmails();
+  const { threads, emails, loading, refresh, session, syncResetCount } = useEmails();
   const [filter, setFilter] = useState<ImportanceFilter>("all");
   const [daysBack, setDaysBackState] = useState(0);
   const [fetchedDaysBack, setFetchedDaysBackState] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [selectedThread, setSelectedThread] = useState<EmailThread | null>(null);
+  const [userLabels, setUserLabels] = useState<UserLabel[]>([]);
   const userId = session?.user?.id ?? null;
   const gmailStatus = useGmailStatus(userId);
+
+  useEffect(() => {
+    if (!userId) return;
+    supabase
+      .from("user_labels")
+      .select("*")
+      .eq("user_id", userId)
+      .then(({ data }) => setUserLabels(data ?? []));
+  }, [userId]);
 
   // Restore persisted days state on mount / user change.
   useEffect(() => {
@@ -136,13 +146,19 @@ export default function EmailViewer() {
         ) : filtered.length === 0 ? (
           <EmptyState onSync={handleSync} />
         ) : (
-          filtered.map((thread) => (
-            <ThreadRow
-              key={thread.thread_id}
-              thread={thread}
-              onClick={() => setSelectedThread(thread)}
-            />
-          ))
+          filtered.map((thread) => {
+            const threadEmail = emails.find((e) => e.thread_id === thread.thread_id);
+            return (
+              <ThreadRow
+                key={thread.thread_id}
+                thread={thread}
+                onClick={() => setSelectedThread(thread)}
+                userLabels={userLabels}
+                getToken={getToken}
+                emailBody={threadEmail?.body ?? threadEmail?.snippet}
+              />
+            );
+          })
         )}
       </div>
 
