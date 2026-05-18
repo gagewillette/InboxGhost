@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { ChevronDown } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { ChevronDown, Sparkles, Trash2, X } from "lucide-react";
 import { useEmails } from "../contexts/email_context";
 import { supabase } from "@/app/supabase";
-import { triggerEmailSync } from "../lib/emails";
+import { triggerEmailSync, deleteThreads, classifyEmail } from "../lib/emails";
 import { useGmailStatus } from "../lib/useGmailStatus";
 import FilterBar from "./FilterBar";
 import ThreadRow from "./ThreadRow";
@@ -28,8 +28,70 @@ function writeInt(key: string, n: number) {
   try { localStorage.setItem(key, String(n)); } catch {}
 }
 
+// ---------- Bulk action bar ----------
+
+type BulkActionBarProps = {
+  selectedCount: number;
+  totalCount: number;
+  classifyingCount: number;
+  deleting: boolean;
+  onSelectAll: () => void;
+  onDeselect: () => void;
+  onClassify: () => void;
+  onDelete: () => void;
+};
+
+function BulkActionBar({
+  selectedCount, totalCount, classifyingCount, deleting,
+  onSelectAll, onDeselect, onClassify, onDelete,
+}: BulkActionBarProps) {
+  const classifying = classifyingCount > 0;
+  return (
+    <div className="ig-bulk-bar">
+      <div className="ig-bulk-info">
+        <span className="ig-bulk-count">{selectedCount} selected</span>
+        <span className="ig-bulk-divider" />
+        {selectedCount < totalCount ? (
+          <button className="ig-bulk-link" onClick={onSelectAll}>
+            Select all {totalCount}
+          </button>
+        ) : (
+          <button className="ig-bulk-link" onClick={onDeselect}>
+            Deselect all
+          </button>
+        )}
+      </div>
+      <div className="ig-bulk-actions">
+        <button
+          className="ig-bulk-btn"
+          onClick={onClassify}
+          disabled={classifying || deleting}
+          title="Classify selected with AI"
+        >
+          <Sparkles size={12} strokeWidth={1.5} />
+          {classifying ? `Classifying ${classifyingCount}…` : `Classify ${selectedCount}`}
+        </button>
+        <button
+          className="ig-bulk-btn ig-bulk-btn--danger"
+          onClick={onDelete}
+          disabled={classifying || deleting}
+          title="Delete selected"
+        >
+          <Trash2 size={12} strokeWidth={1.5} />
+          {deleting ? "Deleting…" : `Delete ${selectedCount}`}
+        </button>
+        <button className="ig-bulk-clear" onClick={onDeselect} aria-label="Clear selection">
+          <X size={13} strokeWidth={1.5} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Main component ----------
+
 export default function EmailViewer() {
-  const { threads, emails, loading, refresh, session, syncResetCount } = useEmails();
+  const { threads, emails, loading, refresh, session, clearCache, syncResetCount } = useEmails();
   const [filter, setFilter] = useState<ImportanceFilter>("all");
   const [daysBack, setDaysBackState] = useState(0);
   const [fetchedDaysBack, setFetchedDaysBackState] = useState(0);
@@ -37,6 +99,13 @@ export default function EmailViewer() {
   const [syncing, setSyncing] = useState(false);
   const [selectedThread, setSelectedThread] = useState<EmailThread | null>(null);
   const [userLabels, setUserLabels] = useState<UserLabel[]>([]);
+
+  // Multi-select
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [classifyingCount, setClassifyingCount] = useState(0);
+  const [deleting, setDeleting] = useState(false);
+  const lastClickedIndex = useRef<number | null>(null);
+
   const userId = session?.user?.id ?? null;
   const gmailStatus = useGmailStatus(userId);
 
@@ -49,17 +118,16 @@ export default function EmailViewer() {
       .then(({ data }) => setUserLabels(data ?? []));
   }, [userId]);
 
-  // Restore persisted days state on mount / user change.
   useEffect(() => {
     setDaysBackState(readInt(DAYS_INPUT_KEY));
     if (userId) setFetchedDaysBackState(readInt(FETCHED_KEY(userId)));
   }, [userId]);
 
-  // Reset days state when the DB is nuked.
   useEffect(() => {
     if (syncResetCount === 0) return;
     setDaysBackState(0);
     setFetchedDaysBackState(0);
+    setSelectedIds(new Set());
     try {
       localStorage.removeItem(DAYS_INPUT_KEY);
       if (userId) localStorage.removeItem(FETCHED_KEY(userId));
@@ -98,16 +166,12 @@ export default function EmailViewer() {
   const handleLoadMore = async () => {
     const token = await getToken();
     if (!token) return;
-
     if (daysBack <= fetchedDaysBack) {
-      // All requested days are already in the DB — just refresh the display.
       await refresh();
       return;
     }
-
     setLoadingMore(true);
     try {
-      // Only fetch the days we don't have yet.
       await triggerEmailSync(token, fetchedDaysBack + 1, daysBack);
       setFetchedDaysBack(daysBack);
       await refresh();
@@ -121,6 +185,72 @@ export default function EmailViewer() {
   const filtered = filter === "all"
     ? threads
     : threads.filter((t) => t.importance === filter);
+
+  // Range-aware select handler passed to each ThreadRow.
+  const handleSelect = useCallback((threadId: string, index: number, shiftKey: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (shiftKey && lastClickedIndex.current !== null) {
+        const lo = Math.min(lastClickedIndex.current, index);
+        const hi = Math.max(lastClickedIndex.current, index);
+        const range = filtered.slice(lo, hi + 1).map((t) => t.thread_id);
+        const allSelected = range.every((id) => next.has(id));
+        range.forEach((id) => (allSelected ? next.delete(id) : next.add(id)));
+      } else {
+        if (next.has(threadId)) next.delete(threadId);
+        else next.add(threadId);
+        lastClickedIndex.current = index;
+      }
+      return next;
+    });
+    if (!shiftKey) lastClickedIndex.current = index;
+  }, [filtered]);
+
+  const handleSelectAll = () => setSelectedIds(new Set(filtered.map((t) => t.thread_id)));
+  const handleDeselect = () => { setSelectedIds(new Set()); lastClickedIndex.current = null; };
+
+  const handleBulkDelete = async () => {
+    if (!userId || deleting) return;
+    setDeleting(true);
+    try {
+      await deleteThreads(userId, [...selectedIds]);
+      clearCache();
+      setSelectedIds(new Set());
+      await refresh();
+    } catch (err) {
+      console.error("Bulk delete failed:", err);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleBulkClassify = async () => {
+    if (classifyingCount > 0) return;
+    const token = await getToken();
+    if (!token) return;
+
+    const toClassify = filtered.filter((t) => selectedIds.has(t.thread_id));
+    setClassifyingCount(toClassify.length);
+
+    for (const thread of toClassify) {
+      try {
+        const threadEmail = emails.find((e) => e.thread_id === thread.thread_id);
+        await classifyEmail(token, {
+          thread_id: thread.thread_id,
+          subject: thread.subject,
+          from_email: thread.sender,
+          body: threadEmail?.body ?? threadEmail?.snippet,
+          user_labels: userLabels.map((l) => ({ name: l.name, description: l.description })),
+        });
+      } catch (err) {
+        console.error("Failed to classify thread", thread.thread_id, err);
+      } finally {
+        setClassifyingCount((n) => n - 1);
+      }
+    }
+  };
+
+  const selectionActive = selectedIds.size > 0;
 
   if (gmailStatus === "disconnected" && userId) {
     return (
@@ -140,19 +270,36 @@ export default function EmailViewer() {
         count={filtered.length}
       />
 
+      {selectionActive && (
+        <BulkActionBar
+          selectedCount={selectedIds.size}
+          totalCount={filtered.length}
+          classifyingCount={classifyingCount}
+          deleting={deleting}
+          onSelectAll={handleSelectAll}
+          onDeselect={handleDeselect}
+          onClassify={handleBulkClassify}
+          onDelete={handleBulkDelete}
+        />
+      )}
+
       <div className="ig-thread-list" role="list">
         {loading || syncing || gmailStatus === "loading" ? (
           <ThreadListSkeleton />
         ) : filtered.length === 0 ? (
           <EmptyState onSync={handleSync} />
         ) : (
-          filtered.map((thread) => {
+          filtered.map((thread, index) => {
             const threadEmail = emails.find((e) => e.thread_id === thread.thread_id);
             return (
               <ThreadRow
                 key={thread.thread_id}
                 thread={thread}
-                onClick={() => setSelectedThread(thread)}
+                index={index}
+                onClick={() => !selectionActive && setSelectedThread(thread)}
+                onSelect={handleSelect}
+                isSelected={selectedIds.has(thread.thread_id)}
+                selectionActive={selectionActive}
                 userLabels={userLabels}
                 getToken={getToken}
                 emailBody={threadEmail?.body ?? threadEmail?.snippet}

@@ -1392,6 +1392,122 @@ kbd {
   cursor: not-allowed;
 }
 
+/* ---------- Bulk action bar ---------- */
+
+.ig-bulk-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--ig-panel-2);
+  border: 1px solid var(--ig-border);
+  margin: 8px 0 2px;
+  animation: ig-bulk-in 120ms ease;
+}
+
+@keyframes ig-bulk-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.ig-bulk-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ig-bulk-count {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ig-fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.ig-bulk-divider {
+  width: 1px;
+  height: 12px;
+  background: var(--ig-border);
+}
+
+.ig-bulk-link {
+  font-size: 12px;
+  color: var(--ig-accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-family: var(--ig-sans);
+  transition: opacity 100ms ease;
+}
+
+.ig-bulk-link:hover { opacity: 0.75; }
+
+.ig-bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ig-bulk-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--ig-border);
+  background: transparent;
+  color: var(--ig-fg-dim);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--ig-sans);
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease, border-color 100ms ease;
+  white-space: nowrap;
+}
+
+.ig-bulk-btn:hover:not(:disabled) {
+  background: var(--ig-panel);
+  color: var(--ig-fg);
+}
+
+.ig-bulk-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ig-bulk-btn--danger {
+  color: var(--ig-danger);
+  border-color: color-mix(in oklch, var(--ig-danger) 30%, transparent);
+}
+
+.ig-bulk-btn--danger:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--ig-danger) 10%, transparent);
+  color: var(--ig-danger);
+  border-color: color-mix(in oklch, var(--ig-danger) 45%, transparent);
+}
+
+.ig-bulk-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  border: none;
+  background: transparent;
+  color: var(--ig-fg-muted);
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease;
+  padding: 0;
+}
+
+.ig-bulk-clear:hover {
+  background: var(--ig-panel);
+  color: var(--ig-fg);
+}
+
 /* ---------- Thread list ---------- */
 
 .ig-thread-list {
@@ -1435,6 +1551,32 @@ kbd {
   color: var(--ig-fg-muted);
   flex-shrink: 0;
   margin-top: 1px;
+}
+
+.ig-thread-icon--selectable {
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.ig-thread-icon--selectable:hover .ig-thread-mail-icon,
+.ig-thread-row--selected .ig-thread-icon--selectable .ig-thread-mail-icon {
+  display: none;
+}
+
+/* Show a faint checkbox ring on hover when nothing selected */
+.ig-thread-icon--selectable:hover {
+  border-color: var(--ig-accent);
+  color: var(--ig-accent);
+}
+
+.ig-thread-icon--checked {
+  background: var(--ig-accent);
+  border-color: var(--ig-accent);
+  color: #fff;
+}
+
+.ig-thread-row--selected {
+  background: color-mix(in oklch, var(--ig-accent) 6%, transparent);
 }
 
 .ig-thread-body {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Flame, Minus, ChevronDown, Mail, Sparkles } from "lucide-react";
+import { Flame, Minus, ChevronDown, Mail, Sparkles, Check } from "lucide-react";
 import type { EmailThread, UserLabel } from "@/app/types";
 import { classifyEmail } from "../lib/emails";
 
@@ -13,7 +13,11 @@ type ClassificationState =
 
 type ThreadRowProps = {
   thread: EmailThread;
+  index: number;
   onClick: () => void;
+  onSelect: (threadId: string, index: number, shiftKey: boolean) => void;
+  isSelected: boolean;
+  selectionActive: boolean;
   userLabels: UserLabel[];
   getToken: () => Promise<string | null>;
   emailBody?: string;
@@ -105,18 +109,31 @@ function ClassificationRow({
   );
 }
 
-export default function ThreadRow({ thread, onClick, userLabels, getToken, emailBody }: ThreadRowProps) {
+export default function ThreadRow({
+  thread, index, onClick, onSelect, isSelected, selectionActive, userLabels, getToken, emailBody,
+}: ThreadRowProps) {
   const [classification, setClassification] = useState<ClassificationState>({ status: "idle" });
+
+  const handleCheckboxClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onSelect(thread.thread_id, index, e.shiftKey);
+  };
+
+  const handleRowClick = (e: React.MouseEvent) => {
+    if (selectionActive) {
+      onSelect(thread.thread_id, index, e.shiftKey);
+    } else {
+      onClick();
+    }
+  };
 
   const handleClassify = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (classification.status === "loading") return;
-
     setClassification({ status: "loading" });
     try {
       const token = await getToken();
       if (!token) throw new Error("Not authenticated");
-
       const result = await classifyEmail(token, {
         thread_id: thread.thread_id,
         subject: thread.subject,
@@ -124,7 +141,6 @@ export default function ThreadRow({ thread, onClick, userLabels, getToken, email
         body: emailBody,
         user_labels: userLabels.map((l) => ({ name: l.name, description: l.description })),
       });
-
       setClassification({ status: "done", importance: result.importance, labels: result.labels });
     } catch {
       setClassification({ status: "error" });
@@ -133,14 +149,25 @@ export default function ThreadRow({ thread, onClick, userLabels, getToken, email
 
   return (
     <div
-      className="ig-thread-row"
+      className={`ig-thread-row${isSelected ? " ig-thread-row--selected" : ""}`}
       role="listitem"
       tabIndex={0}
-      onClick={onClick}
+      onClick={handleRowClick}
       onKeyDown={(e) => e.key === "Enter" && onClick()}
     >
-      <div className="ig-thread-icon">
-        <Mail size={15} strokeWidth={1.5} />
+      {/* Checkbox / mail icon area */}
+      <div
+        className={`ig-thread-icon ig-thread-icon--selectable${isSelected ? " ig-thread-icon--checked" : ""}`}
+        onClick={handleCheckboxClick}
+        role="checkbox"
+        aria-checked={isSelected}
+        aria-label={`Select "${thread.subject}"`}
+      >
+        {isSelected ? (
+          <Check size={13} strokeWidth={2.5} />
+        ) : (
+          <Mail size={15} strokeWidth={1.5} className="ig-thread-mail-icon" />
+        )}
       </div>
 
       <div className="ig-thread-body">
@@ -149,15 +176,17 @@ export default function ThreadRow({ thread, onClick, userLabels, getToken, email
           <div className="ig-thread-meta">
             {classification.status === "idle" && <ImportanceBadge level={thread.importance} />}
             <span className="ig-thread-time">{formatRelativeTime(thread.last_message_at)}</span>
-            <button
-              className="ig-thread-classify-btn"
-              onClick={handleClassify}
-              disabled={classification.status === "loading"}
-              title="Classify with AI"
-              aria-label="Classify email with AI"
-            >
-              <Sparkles size={12} strokeWidth={1.5} />
-            </button>
+            {!selectionActive && (
+              <button
+                className="ig-thread-classify-btn"
+                onClick={handleClassify}
+                disabled={classification.status === "loading"}
+                title="Classify with AI"
+                aria-label="Classify email with AI"
+              >
+                <Sparkles size={12} strokeWidth={1.5} />
+              </button>
+            )}
           </div>
         </div>
 
