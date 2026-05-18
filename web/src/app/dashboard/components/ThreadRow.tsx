@@ -175,7 +175,6 @@ export default function ThreadRow({
         <div className="ig-thread-top">
           <span className="ig-thread-subject">{thread.subject || "(no subject)"}</span>
           <div className="ig-thread-meta">
-            {classification.status === "idle" && <ImportanceBadge level={thread.importance} />}
             <span className="ig-thread-time">{formatRelativeTime(thread.last_message_at)}</span>
 
             {!selectionActive && (
@@ -192,12 +191,17 @@ export default function ThreadRow({
           </div>
         </div>
 
-        {classification.status === "idle" && (thread.labels?.length ?? 0) > 0 && (
+        {classification.status === "idle" && (thread.importance || (thread.labels?.length ?? 0) > 0) && (
           <div className="ig-thread-classification">
-            <span className="ig-thread-classify-dot" aria-hidden="true">·</span>
-            {thread.labels!.map((l) => (
-              <LabelChip key={l} label={l} userLabels={userLabels} />
-            ))}
+            <ImportanceBadge level={thread.importance} />
+            {(thread.labels?.length ?? 0) > 0 && (
+              <>
+                <span className="ig-thread-classify-dot" aria-hidden="true">·</span>
+                {thread.labels!.map((l) => (
+                  <LabelChip key={l} label={l} userLabels={userLabels} />
+                ))}
+              </>
+            )}
           </div>
         )}
         {classification.status !== "idle" && (

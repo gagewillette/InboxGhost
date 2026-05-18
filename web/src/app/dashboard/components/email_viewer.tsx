@@ -93,6 +93,7 @@ function BulkActionBar({
 export default function EmailViewer() {
   const { threads, emails, loading, refresh, session, clearCache, syncResetCount } = useEmails();
   const [filter, setFilter] = useState<ImportanceFilter>("all");
+  const [selectedLabels, setSelectedLabels] = useState<Set<string>>(new Set());
   const [daysBack, setDaysBackState] = useState(0);
   const [fetchedDaysBack, setFetchedDaysBackState] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -182,9 +183,18 @@ export default function EmailViewer() {
     }
   };
 
-  const filtered = filter === "all"
-    ? threads
-    : threads.filter((t) => t.importance === filter);
+  const filtered = threads
+    .filter((t) => filter === "all" || t.importance === filter)
+    .filter((t) => selectedLabels.size === 0 || t.labels?.some((l) => selectedLabels.has(l)));
+
+  const handleLabelToggle = (name: string) =>
+    setSelectedLabels((prev) => {
+      const next = new Set(prev);
+      next.has(name) ? next.delete(name) : next.add(name);
+      return next;
+    });
+
+  const handleLabelClear = () => setSelectedLabels(new Set());
 
   // Range-aware select handler passed to each ThreadRow.
   const handleSelect = useCallback((threadId: string, index: number, shiftKey: boolean) => {
@@ -268,6 +278,10 @@ export default function EmailViewer() {
         onRefresh={refresh}
         loading={loading}
         count={filtered.length}
+        userLabels={userLabels}
+        selectedLabels={selectedLabels}
+        onLabelToggle={handleLabelToggle}
+        onLabelClear={handleLabelClear}
       />
 
       {selectionActive && (

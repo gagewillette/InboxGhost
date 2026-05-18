@@ -1392,6 +1392,113 @@ kbd {
   cursor: not-allowed;
 }
 
+/* ---------- Label dropdown ---------- */
+
+.ig-label-dropdown {
+  position: relative;
+}
+
+.ig-pill--label-trigger {
+  gap: 5px;
+}
+
+.ig-pill-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--ig-accent);
+  color: #000;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.ig-pill-chevron {
+  transition: transform 150ms ease;
+  flex-shrink: 0;
+}
+
+.ig-pill-chevron--open {
+  transform: rotate(-180deg);
+}
+
+.ig-label-dropdown-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 180px;
+  background: var(--ig-panel-2);
+  border: 1px solid var(--ig-border);
+  border-radius: 10px;
+  padding: 4px;
+  z-index: 50;
+  box-shadow: 0 8px 24px oklch(0 0 0 / 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.ig-label-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background 100ms ease;
+}
+
+.ig-label-dropdown-item:hover {
+  background: var(--ig-panel);
+}
+
+.ig-label-dropdown-item--selected {
+  background: color-mix(in oklch, var(--ig-accent) 8%, transparent);
+}
+
+.ig-label-dropdown-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--ig-accent);
+}
+
+.ig-label-dropdown-divider {
+  height: 1px;
+  background: var(--ig-border-soft);
+  margin: 3px 0;
+}
+
+.ig-label-dropdown-clear {
+  width: 100%;
+  padding: 5px 8px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  color: var(--ig-fg-muted);
+  font-size: 11px;
+  font-family: var(--ig-sans);
+  cursor: pointer;
+  text-align: left;
+  transition: background 100ms ease, color 100ms ease;
+}
+
+.ig-label-dropdown-clear:hover {
+  background: var(--ig-panel);
+  color: var(--ig-fg);
+}
+
 /* ---------- Bulk action bar ---------- */
 
 .ig-bulk-bar {
