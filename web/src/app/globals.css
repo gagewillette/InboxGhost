@@ -1399,11 +1399,11 @@ kbd {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 8px 12px;
+  padding: 8px 16px;
   border-radius: 8px;
   background: var(--ig-panel-2);
   border: 1px solid var(--ig-border);
-  margin: 8px 0 2px;
+  margin: 8px -8px 2px;
   animation: ig-bulk-in 120ms ease;
 }
 
@@ -1577,6 +1577,9 @@ kbd {
 
 .ig-thread-row--selected {
   background: color-mix(in oklch, var(--ig-accent) 6%, transparent);
+  padding-left: 8px;
+  padding-right: 8px;
+  margin: 0 -8px;
 }
 
 .ig-thread-body {

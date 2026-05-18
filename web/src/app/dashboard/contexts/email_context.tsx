@@ -5,7 +5,6 @@ import {
   useCallback,
   useContext,
   useEffect,
-  useMemo,
   useState,
 } from 'react'
 import { Session } from '@supabase/supabase-js'
@@ -169,16 +168,12 @@ export const EmailProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const bumpSyncReset = useCallback(() => setSyncResetCount((n) => n + 1), [])
 
-  const contextValue = useMemo(
-    () => ({ emails, threads, loading, error, session, refresh, clearCache, syncResetCount, bumpSyncReset }),
-    [emails, threads, loading, error, session, refresh, clearCache, syncResetCount, bumpSyncReset]
-  )
+  const value: EmailContextType = {
+    emails, threads, loading, error, session,
+    refresh, clearCache, syncResetCount, bumpSyncReset,
+  }
 
-  return (
-    <EmailContext.Provider value={contextValue}>
-      {children}
-    </EmailContext.Provider>
-  )
+  return <EmailContext.Provider value={value}>{children}</EmailContext.Provider>
 }
 
 export const useEmails = (): EmailContextType => {

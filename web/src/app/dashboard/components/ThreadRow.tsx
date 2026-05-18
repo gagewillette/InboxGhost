@@ -153,6 +153,7 @@ export default function ThreadRow({
       role="listitem"
       tabIndex={0}
       onClick={handleRowClick}
+      onMouseDown={(e) => { if (e.shiftKey) e.preventDefault(); }}
       onKeyDown={(e) => e.key === "Enter" && onClick()}
     >
       {/* Checkbox / mail icon area */}
@@ -176,6 +177,7 @@ export default function ThreadRow({
           <div className="ig-thread-meta">
             {classification.status === "idle" && <ImportanceBadge level={thread.importance} />}
             <span className="ig-thread-time">{formatRelativeTime(thread.last_message_at)}</span>
+
             {!selectionActive && (
               <button
                 className="ig-thread-classify-btn"
@@ -190,7 +192,17 @@ export default function ThreadRow({
           </div>
         </div>
 
-        <ClassificationRow state={classification} userLabels={userLabels} />
+        {classification.status === "idle" && (thread.labels?.length ?? 0) > 0 && (
+          <div className="ig-thread-classification">
+            <span className="ig-thread-classify-dot" aria-hidden="true">·</span>
+            {thread.labels!.map((l) => (
+              <LabelChip key={l} label={l} userLabels={userLabels} />
+            ))}
+          </div>
+        )}
+        {classification.status !== "idle" && (
+          <ClassificationRow state={classification} userLabels={userLabels} />
+        )}
 
         <span className="ig-thread-sender">{thread.sender}</span>
       </div>

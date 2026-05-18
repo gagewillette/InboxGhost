@@ -28,6 +28,7 @@ export interface EmailThread {
   sender: string;
   last_message_at: string; // ISO string
   importance?: "high" | "med" | "low";
+  labels?: string[];
   attachments: EmailAttachment[];
 }
 

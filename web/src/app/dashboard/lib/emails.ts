@@ -22,13 +22,31 @@ export async function fetchEmails(userId: string): Promise<Email[]> {
 export async function fetchEmailThreads(
   userId: string
 ): Promise<EmailThread[]> {
-  const { data, error } = await supabase
-    .from("email_threads")
-    .select("*")
-    .eq("user_id", userId);
+  // email_classifications has no FK to email_threads, so PostgREST embed
+  // doesn't work — fetch separately and merge by thread_id.
+  const [threadsRes, classRes] = await Promise.all([
+    supabase.from("email_threads").select("*").eq("user_id", userId),
+    supabase
+      .from("email_classifications")
+      .select("thread_id, importance, labels")
+      .eq("user_id", userId),
+  ]);
 
-  if (error) throw new Error(error.message);
-  return data ?? [];
+  if (threadsRes.error) throw new Error(threadsRes.error.message);
+  if (classRes.error) throw new Error(classRes.error.message);
+
+  const classByThread = new Map(
+    (classRes.data ?? []).map((c) => [c.thread_id, c])
+  );
+
+  return (threadsRes.data ?? []).map((thread) => {
+    const cls = classByThread.get(thread.thread_id);
+    return {
+      ...thread,
+      importance: cls?.importance ?? thread.importance,
+      labels: cls?.labels ?? [],
+    };
+  });
 }
 
 function decodeHtmlEntities(str: string) {
