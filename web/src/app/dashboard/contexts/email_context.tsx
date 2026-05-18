@@ -22,15 +22,21 @@ function readCache(userId: string): { emails: Email[]; threads: EmailThread[] } 
   try {
     const raw = localStorage.getItem(cacheKey(userId))
     if (!raw) return null
+
     const { emails, threads, cachedAt } = JSON.parse(raw)
+
     if (Date.now() - cachedAt > CACHE_TTL_MS) return null
+
     return { emails, threads }
+
   } catch { return null }
 }
 
 function writeCache(userId: string, emails: Email[], threads: EmailThread[]) {
   try {
+
     localStorage.setItem(cacheKey(userId), JSON.stringify({ emails, threads, cachedAt: Date.now() }))
+
   } catch {} // storage full or private browsing
 }
 
@@ -65,11 +71,15 @@ export const EmailProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
       setSession(s)
+      
+      // Refresh GMAIL token if auth provider throws signed in event
       if (event === 'SIGNED_IN' && s?.access_token && s.user) {
         refreshGmailToken(s.access_token).then((result) => {
+
           if (result?.reason === 'needs_reauth') {
             window.location.href = buildGmailAuthUrl(s.user!.id)
           }
+
         }).catch(console.error)
       }
     })
@@ -77,7 +87,7 @@ export const EmailProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return () => subscription.unsubscribe()
   }, [])
 
-  const fetchData = useCallback(async () => {
+  const fetchEmailAndThreadData = useCallback(async () => {
     if (!session?.user) return
 
     const cached = readCache(session.user.id)
@@ -113,7 +123,7 @@ export const EmailProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (!session?.user) return
 
     // Load from DB immediately so the UI isn't blocked on the sync.
-    fetchData()
+    fetchEmailAndThreadData()
 
     // Then check if a background sync is needed (stale > 2 hours).
     const autoSync = async () => {
@@ -139,19 +149,19 @@ export const EmailProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       try {
         await triggerEmailSync(s.access_token, 0)
         dropCache(session.user.id)
-        await fetchData()
+        await fetchEmailAndThreadData()
       } catch (err) {
         console.error('Auto-sync failed:', err)
       }
     }
 
     autoSync()
-  }, [session, fetchData])
+  }, [session, fetchEmailAndThreadData])
 
   const refresh = useCallback(async () => {
     if (session?.user) dropCache(session.user.id)
-    await fetchData()
-  }, [session, fetchData])
+    await fetchEmailAndThreadData()
+  }, [session, fetchEmailAndThreadData])
 
   const clearCache = useCallback(() => {
     if (session?.user) dropCache(session.user.id)
