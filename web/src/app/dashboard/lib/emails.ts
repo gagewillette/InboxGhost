@@ -105,6 +105,17 @@ export async function fetchAttachment(
   return res.json();
 }
 
+export async function deleteThreads(userId: string, threadIds: string[]): Promise<void> {
+  // Delete child rows first to satisfy any FK constraints.
+  await supabase.from("emails").delete().eq("user_id", userId).in("thread_id", threadIds);
+  const { error } = await supabase
+    .from("email_threads")
+    .delete()
+    .eq("user_id", userId)
+    .in("thread_id", threadIds);
+  if (error) throw new Error(error.message);
+}
+
 export async function classifyEmail(
   accessToken: string,
   payload: {
